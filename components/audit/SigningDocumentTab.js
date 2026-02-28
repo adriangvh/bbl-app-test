@@ -68,86 +68,6 @@ export default function SigningDocumentTab({
     onChange(editorRef.current?.innerHTML || "");
   }
 
-  function escapeHtml(value) {
-    return String(value || "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
-  }
-
-  function exportToPdf() {
-    const contentHtml = editorRef.current?.innerHTML || String(value || "");
-    const popup = window.open("", "_blank", "noopener,noreferrer,width=1100,height=900");
-    if (!popup) {
-      return;
-    }
-
-    const companyName = escapeHtml(selectedCompany?.name || "-");
-    const orgNo = escapeHtml(selectedCompany?.organizationNumber || "-");
-    const title = `Signing Document - ${companyName}`;
-
-    popup.document.open();
-    popup.document.write(`<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>${title}</title>
-    <style>
-      @page { size: A4; margin: 18mm 16mm 18mm 16mm; }
-      * { box-sizing: border-box; }
-      body { margin: 0; background: #eef2f7; color: #0f172a; font-family: "Times New Roman", Georgia, serif; }
-      .sheet {
-        width: 210mm;
-        min-height: 297mm;
-        margin: 10mm auto;
-        background: #fff;
-        border: 1px solid #dbe3f0;
-        box-shadow: 0 14px 34px rgba(15, 23, 42, 0.16);
-        padding: 18mm 16mm;
-      }
-      .head { margin-bottom: 10mm; padding-bottom: 4mm; border-bottom: 1px solid #e2e8f0; }
-      .title { font-weight: 700; font-size: 21px; margin-bottom: 4mm; }
-      .meta { display: flex; flex-wrap: wrap; gap: 8mm; font-size: 12px; color: #334155; }
-      .content { font-size: 14px; line-height: 1.7; }
-      .content h2 { font-size: 17px; margin: 7mm 0 3mm; }
-      .content p { margin: 0 0 3mm; }
-      .content ul { margin: 0 0 3.5mm 5mm; }
-      .foot { margin-top: 8mm; text-align: right; color: #64748b; font-size: 11px; }
-      .print-btn {
-        position: fixed; right: 16px; top: 12px;
-        border-radius: 8px; border: 1px solid #2563eb; background: #2563eb; color: #fff;
-        font-size: 12px; font-weight: 700; padding: 7px 10px; cursor: pointer;
-      }
-      @media print {
-        body { background: #fff; }
-        .sheet { margin: 0; border: none; box-shadow: none; width: auto; min-height: auto; padding: 0; }
-        .print-btn { display: none; }
-      }
-    </style>
-  </head>
-  <body>
-    <button class="print-btn" onclick="window.print()">Export / Print PDF</button>
-    <article class="sheet">
-      <header class="head">
-        <div class="title">Audit Sign-Off Memorandum</div>
-        <div class="meta">
-          <span>Company: <strong>${companyName}</strong></span>
-          <span>Org no: <strong>${orgNo}</strong></span>
-          <span>Date: ${escapeHtml(formatTodayLong())}</span>
-        </div>
-      </header>
-      <section class="content">${contentHtml}</section>
-      <footer class="foot">Page 1 of 1</footer>
-    </article>
-  </body>
-</html>`);
-    popup.document.close();
-    popup.focus();
-    setTimeout(() => {
-      popup.print();
-    }, 300);
-  }
-
   return (
     <div style={styles.card}>
       <div style={styles.signingToolbar}>
@@ -205,13 +125,6 @@ export default function SigningDocumentTab({
           </button>
         </div>
         <div style={styles.signingToolbarActions}>
-          <button
-            type="button"
-            style={styles.signingExportButton}
-            onClick={exportToPdf}
-          >
-            Export to PDF
-          </button>
           <button
             type="button"
             style={styles.signingGhostButton}

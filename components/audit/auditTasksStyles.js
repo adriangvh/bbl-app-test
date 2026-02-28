@@ -531,6 +531,15 @@ export const styles = {
     borderCollapse: "separate",
     borderSpacing: 0,
   },
+  thTaskDescription: {
+    width: 220,
+  },
+  thStatus: {
+    width: 190,
+  },
+  thComment: {
+    width: 460,
+  },
   th: {
     textAlign: "left",
     fontSize: 12,
@@ -554,6 +563,15 @@ export const styles = {
     verticalAlign: "top",
     color: "#111827",
     fontSize: 14,
+  },
+  tdDescription: {
+    padding: ".85rem 1rem",
+    borderBottom: "1px solid #f3f4f6",
+    verticalAlign: "top",
+    color: "#111827",
+    fontSize: 14,
+    maxWidth: 240,
+    lineHeight: 1.45,
   },
   tdStrong: {
     padding: ".85rem 1rem",
@@ -589,7 +607,7 @@ export const styles = {
     border: "1px solid #d1d5db",
     borderRadius: 999,
     paddingRight: "1.35rem",
-    width: 150,
+    width: 180,
     flexShrink: 0,
   },
   statusSelect: {
@@ -620,7 +638,7 @@ export const styles = {
     verticalAlign: "top",
     color: "#111827",
     fontSize: 14,
-    minWidth: 360,
+    minWidth: 460,
   },
   tdDiscussionWrap: {
     padding: ".35rem .8rem .75rem",
@@ -739,7 +757,7 @@ export const styles = {
   },
   rowTextarea: {
     width: "100%",
-    minWidth: 320,
+    minWidth: 420,
     minHeight: 82,
     padding: ".55rem .65rem",
     borderRadius: 10,
@@ -836,16 +854,6 @@ export const styles = {
     gap: ".45rem",
     alignItems: "center",
     flexWrap: "wrap",
-  },
-  signingExportButton: {
-    borderRadius: 10,
-    border: "1px solid #0f766e",
-    background: "#ecfdf5",
-    color: "#065f46",
-    fontSize: 13,
-    fontWeight: 700,
-    padding: ".46rem .75rem",
-    cursor: "pointer",
   },
   signingGhostButton: {
     borderRadius: 10,

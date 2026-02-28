@@ -94,10 +94,10 @@ export default function AuditTasksTab({
             <tr>
               <th style={styles.th}>Task no.</th>
               <th style={styles.th}>Task</th>
-              <th style={styles.th}>Task description</th>
+              <th style={{ ...styles.th, ...styles.thTaskDescription }}>Task description</th>
               <th style={styles.th}>Robot processed</th>
-              <th style={styles.th}>Status</th>
-              <th style={styles.th}>Comment</th>
+              <th style={{ ...styles.th, ...styles.thStatus }}>Status</th>
+              <th style={{ ...styles.th, ...styles.thComment }}>Comment</th>
               <th style={styles.th}>Evidence / output</th>
               <th style={styles.th}>Last updated</th>
               <th style={styles.th}>Discussion</th>
@@ -124,7 +124,7 @@ export default function AuditTasksTab({
                   <tr key={r.id} style={styles.tr}>
                     <td style={styles.tdMono}>{r.taskNumber || "-"}</td>
                     <td style={styles.tdStrong}>{r.task}</td>
-                    <td style={styles.td}>{r.description}</td>
+                    <td style={styles.tdDescription}>{r.description}</td>
                     <td style={styles.td}>
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                         <span
@@ -244,10 +244,6 @@ export default function AuditTasksTab({
             )}
           </tbody>
         </table>
-      </div>
-
-      <div style={styles.note}>
-        Data is persisted per company in a local file-backed database via `/api/audit-tasks`.
       </div>
     </div>
   );
