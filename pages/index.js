@@ -14,6 +14,7 @@ function formatLock(lock) {
 export default function Home() {
   const [companies, setCompanies] = useState([]);
   const [groupFilter, setGroupFilter] = useState("all");
+  const [stageFilter, setStageFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [actorId, setActorId] = useState("");
@@ -112,8 +113,12 @@ export default function Home() {
   }
 
   const groupOptions = Array.from(new Set(companies.map((company) => company.group))).sort();
+  const stageOptions = Array.from(
+    new Set(companies.map((company) => company.auditStage).filter(Boolean))
+  );
   const filteredCompanies = companies.filter((company) =>
-    groupFilter === "all" ? true : company.group === groupFilter
+    (groupFilter === "all" ? true : company.group === groupFilter) &&
+    (stageFilter === "all" ? true : company.auditStage === stageFilter)
   );
 
   return (
@@ -148,6 +153,18 @@ export default function Home() {
               </option>
             ))}
           </select>
+          <select
+            style={styles.filterSelect}
+            value={stageFilter}
+            onChange={(e) => setStageFilter(e.target.value)}
+          >
+            <option value="all">All stages</option>
+            {stageOptions.map((stage) => (
+              <option key={stage} value={stage}>
+                {stage}
+              </option>
+            ))}
+          </select>
         </div>
 
         {error && <div style={styles.error}>{error}</div>}
@@ -159,6 +176,7 @@ export default function Home() {
                 <th style={styles.th}>Company</th>
                 <th style={styles.th}>Organization no.</th>
                 <th style={styles.th}>Group</th>
+                <th style={styles.th}>Stage</th>
                 <th style={styles.th}>Tasks</th>
                 <th style={styles.th}>Lock status</th>
                 <th style={styles.th}>Actions</th>
@@ -167,13 +185,13 @@ export default function Home() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td style={styles.td} colSpan={6}>
+                  <td style={styles.td} colSpan={7}>
                     Loading companies...
                   </td>
                 </tr>
               ) : filteredCompanies.length === 0 ? (
                 <tr>
-                  <td style={styles.td} colSpan={6}>
+                  <td style={styles.td} colSpan={7}>
                     No companies in this group.
                   </td>
                 </tr>
@@ -187,6 +205,7 @@ export default function Home() {
                     <td style={styles.tdStrong}>{company.name}</td>
                     <td style={styles.tdMono}>{company.organizationNumber}</td>
                     <td style={styles.td}>{company.group}</td>
+                    <td style={styles.td}>{company.auditStage || "-"}</td>
                     <td style={styles.td}>{company.taskCount}</td>
                     <td style={styles.tdLock}>
                       <span style={styles.lockStatusSlot}>

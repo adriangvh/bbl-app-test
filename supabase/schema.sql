@@ -7,8 +7,12 @@ create table if not exists public.audit_companies (
   organization_number text not null,
   organization_type text not null,
   responsible_partner text not null,
+  audit_stage text not null default 'First time auditing',
   created_at timestamptz not null default now()
 );
+
+alter table public.audit_companies
+add column if not exists audit_stage text not null default 'First time auditing';
 
 create table if not exists public.audit_tasks (
   id text primary key,

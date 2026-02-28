@@ -57,6 +57,7 @@ export default function AuditTasks() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [savingById, setSavingById] = useState({});
+  const [stageBusy, setStageBusy] = useState(false);
 
   const holdsLock = Boolean(lock && actorId && lock.actorId === actorId);
   const canEdit = holdsLock;
@@ -270,6 +271,46 @@ export default function AuditTasks() {
     }
   }
 
+  async function advanceStage() {
+    if (!selectedCompanyId || !actorId) {
+      return;
+    }
+    setStageBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/audit-tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "advance_stage",
+          companyId: selectedCompanyId,
+          actorId,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        if (data.lock !== undefined) {
+          setLock(data.lock);
+        }
+        throw new Error(data.error || "Could not move company to next stage.");
+      }
+      if (data.lock !== undefined) {
+        setLock(data.lock);
+      }
+      if (data.company) {
+        setCompanies((prev) =>
+          prev.map((company) =>
+            company.id === data.company.id ? { ...company, ...data.company } : company
+          )
+        );
+      }
+    } catch (stageError) {
+      setError(stageError.message || "Could not move company to next stage.");
+    } finally {
+      setStageBusy(false);
+    }
+  }
+
   return (
     <>
       <Head>
@@ -295,7 +336,16 @@ export default function AuditTasks() {
         </header>
 
         <section style={styles.companyInfoCard}>
-          <h2 style={styles.companyInfoTitle}>Company Information</h2>
+          <div style={styles.companyInfoHeader}>
+            <h2 style={styles.companyInfoTitle}>Company Information</h2>
+            <button
+              style={styles.nextStageButton}
+              disabled={!holdsLock || stageBusy}
+              onClick={advanceStage}
+            >
+              Send to next stage
+            </button>
+          </div>
           <div style={styles.companyInfoGrid}>
             <div style={styles.infoItem}>
               <span style={styles.infoLabel}>organization_type</span>
@@ -318,6 +368,10 @@ export default function AuditTasks() {
               <span style={styles.infoValue}>
                 {selectedCompany?.organizationNumber || "-"}
               </span>
+            </div>
+            <div style={styles.infoItem}>
+              <span style={styles.infoLabel}>audit_stage</span>
+              <span style={styles.infoValue}>{selectedCompany?.auditStage || "-"}</span>
             </div>
           </div>
         </section>
@@ -477,8 +531,16 @@ const styles = {
     marginBottom: "1rem",
   },
   companyInfoTitle: {
-    margin: "0 0 .75rem 0",
+    margin: 0,
     fontSize: 16,
+  },
+  companyInfoHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: ".75rem",
+    alignItems: "center",
+    flexWrap: "wrap",
+    marginBottom: ".75rem",
   },
   companyInfoGrid: {
     display: "grid",
@@ -504,6 +566,16 @@ const styles = {
     fontSize: 14,
     fontWeight: 600,
     color: "#111827",
+  },
+  nextStageButton: {
+    padding: ".45rem .75rem",
+    borderRadius: 10,
+    border: "1px solid #111827",
+    background: "#111827",
+    color: "#fff",
+    fontWeight: 600,
+    cursor: "pointer",
+    fontSize: 13,
   },
   toolbar: {
     display: "flex",

@@ -1,4 +1,5 @@
 import {
+  advanceCompanyStage,
   claimCompanyLock,
   getAuditData,
   releaseCompanyLock,
@@ -100,6 +101,8 @@ export default async function handler(req, res) {
       result = await renewCompanyLock(companyId, actorId);
     } else if (action === "release") {
       result = await releaseCompanyLock(companyId, actorId);
+    } else if (action === "advance_stage") {
+      result = await advanceCompanyStage(companyId, actorId);
     } else {
       res.status(400).json({ error: "Invalid action." });
       return;
@@ -110,7 +113,10 @@ export default async function handler(req, res) {
       return;
     }
 
-    res.status(200).json({ lock: result.lock || null });
+    res.status(200).json({
+      lock: result.lock || null,
+      company: result.company || null,
+    });
     return;
   }
 
