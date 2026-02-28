@@ -147,7 +147,7 @@ export default function SigningDocumentTab({
       <div className="signing-page-wrap" style={styles.signingPaperWrap}>
         <div className="signing-a4-page" style={styles.signingPage}>
           <div style={styles.signingPaperHeader}>
-            <div style={styles.signingPaperTitle}>Audit Sign-Off Memorandum</div>
+            <div style={styles.signingPaperTitle}>Audit Sign-Off</div>
             <div style={styles.signingPaperMeta}>
               <span>
                 Company: <strong>{selectedCompany?.name || "-"}</strong>
