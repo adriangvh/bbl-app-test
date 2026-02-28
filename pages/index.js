@@ -77,6 +77,8 @@ function isDueSoon(company) {
 
 export default function Home() {
   const [companies, setCompanies] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [notificationBusyById, setNotificationBusyById] = useState({});
   const [groupFilter, setGroupFilter] = useState("all");
   const [stageFilter, setStageFilter] = useState("all");
   const [lockFilter, setLockFilter] = useState("all");
@@ -113,6 +115,24 @@ export default function Home() {
     }
   }
 
+  async function loadNotifications() {
+    if (!actorName.trim()) {
+      setNotifications([]);
+      return;
+    }
+    try {
+      const params = new URLSearchParams({ viewerName: actorName.trim() });
+      const response = await fetch(`/api/audit-notifications?${params.toString()}`);
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Could not load notifications.");
+      }
+      setNotifications(data.notifications || []);
+    } catch (notificationError) {
+      setError(notificationError.message || "Could not load notifications.");
+    }
+  }
+
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
@@ -134,6 +154,9 @@ export default function Home() {
       setEmployeeType(existingEmployeeType);
     }
     loadCompanies();
+    if (existingActorName) {
+      loadNotifications();
+    }
   }, []);
 
   useEffect(() => {
@@ -141,9 +164,11 @@ export default function Home() {
       return;
     }
     if (!actorName) {
+      setNotifications([]);
       return;
     }
     window.localStorage.setItem("auditActorName", actorName);
+    loadNotifications();
   }, [actorName]);
 
   useEffect(() => {
@@ -159,9 +184,39 @@ export default function Home() {
         return;
       }
       loadCompanies({ silent: true });
+      loadNotifications();
     }, COMPANIES_POLL_MS);
     return () => clearInterval(timer);
   }, []);
+
+  async function markNotificationRead(notificationId) {
+    if (!actorName.trim()) {
+      return;
+    }
+    setNotificationBusyById((prev) => ({ ...prev, [notificationId]: true }));
+    try {
+      const response = await fetch("/api/audit-notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "mark_read",
+          notificationId,
+          viewerName: actorName.trim(),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Could not mark notification as read.");
+      }
+      setNotifications((prev) =>
+        prev.filter((notification) => notification.id !== String(notificationId))
+      );
+    } catch (notificationError) {
+      setError(notificationError.message || "Could not mark notification as read.");
+    } finally {
+      setNotificationBusyById((prev) => ({ ...prev, [notificationId]: false }));
+    }
+  }
 
   async function updateLock(companyId, action) {
     if (!actorId) {
@@ -305,6 +360,49 @@ export default function Home() {
             </select>
           </div>
         </div>
+
+        {notifications.length > 0 && (
+          <section style={styles.notificationsWrap}>
+            <div style={styles.notificationsHeader}>
+              <span style={styles.notificationsTitle}>Alerts</span>
+              <span style={styles.notificationsCount}>{notifications.length}</span>
+            </div>
+            <div style={styles.notificationsList}>
+              {notifications.map((notification) => (
+                <div key={notification.id} style={styles.notificationItem}>
+                  <div style={styles.notificationMessage}>{notification.message}</div>
+                  <div style={styles.notificationMeta}>
+                    <span>{notification.companyName}</span>
+                    <span>•</span>
+                    <span>From {notification.senderName}</span>
+                  </div>
+                  <div style={styles.notificationActions}>
+                    <Link
+                      href={{
+                        pathname: "/audit-tasks",
+                        query: {
+                          companyId: notification.companyId,
+                          companyName: notification.companyName,
+                        },
+                      }}
+                      style={styles.notificationOpenLink}
+                    >
+                      Open company
+                    </Link>
+                    <button
+                      type="button"
+                      style={styles.notificationReadButton}
+                      disabled={Boolean(notificationBusyById[notification.id])}
+                      onClick={() => markNotificationRead(notification.id)}
+                    >
+                      {notificationBusyById[notification.id] ? "Saving..." : "Mark as read"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         <div style={styles.headerRow}>
           <div style={styles.filterField}>
@@ -488,6 +586,89 @@ const styles = {
     fontSize: 13,
     borderRadius: 10,
     padding: ".5rem .75rem",
+  },
+  notificationsWrap: {
+    marginBottom: "1rem",
+    border: "1px solid #fed7aa",
+    borderRadius: 12,
+    background: "#fff7ed",
+    padding: ".65rem .75rem",
+  },
+  notificationsHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: ".5rem",
+  },
+  notificationsTitle: {
+    fontSize: 12,
+    fontWeight: 700,
+    textTransform: "uppercase",
+    letterSpacing: ".02em",
+    color: "#9a3412",
+  },
+  notificationsCount: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 20,
+    height: 20,
+    borderRadius: 999,
+    background: "#fff",
+    color: "#9a3412",
+    fontSize: 12,
+    fontWeight: 700,
+    padding: "0 .35rem",
+  },
+  notificationsList: {
+    display: "grid",
+    gap: ".45rem",
+  },
+  notificationItem: {
+    border: "1px solid #fdba74",
+    borderRadius: 10,
+    background: "#fff",
+    padding: ".5rem .6rem",
+  },
+  notificationMessage: {
+    fontSize: 14,
+    color: "#7c2d12",
+    lineHeight: 1.4,
+  },
+  notificationMeta: {
+    marginTop: ".2rem",
+    display: "inline-flex",
+    gap: ".35rem",
+    fontSize: 12,
+    color: "#9a3412",
+    alignItems: "center",
+  },
+  notificationActions: {
+    marginTop: ".45rem",
+    display: "flex",
+    gap: ".45rem",
+    alignItems: "center",
+    flexWrap: "wrap",
+  },
+  notificationOpenLink: {
+    borderRadius: 8,
+    border: "1px solid #fdba74",
+    background: "#fff7ed",
+    color: "#9a3412",
+    textDecoration: "none",
+    fontSize: 12,
+    fontWeight: 700,
+    padding: ".32rem .56rem",
+  },
+  notificationReadButton: {
+    borderRadius: 8,
+    border: "1px solid #fdba74",
+    background: "#fff",
+    color: "#9a3412",
+    fontSize: 12,
+    fontWeight: 700,
+    padding: ".32rem .56rem",
+    cursor: "pointer",
   },
   sessionRow: {
     marginTop: ".9rem",

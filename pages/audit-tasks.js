@@ -6,7 +6,6 @@ import AuditTasksTab from "../components/audit/AuditTasksTab";
 import ActivityTimeline from "../components/audit/ActivityTimeline";
 import CompanyLockBar from "../components/audit/CompanyLockBar";
 import CompanyInfoCard from "../components/audit/CompanyInfoCard";
-import NotificationsPanel from "../components/audit/NotificationsPanel";
 import PresencePanel from "../components/audit/PresencePanel";
 import RiskResponsibilityTab from "../components/audit/RiskResponsibilityTab";
 import { styles } from "../components/audit/auditTasksStyles";
@@ -23,9 +22,7 @@ export default function AuditTasks() {
   const [rows, setRows] = useState([]);
   const [activity, setActivity] = useState([]);
   const [discussions, setDiscussions] = useState([]);
-  const [notifications, setNotifications] = useState([]);
   const [discussionBusyByTask, setDiscussionBusyByTask] = useState({});
-  const [notificationBusyById, setNotificationBusyById] = useState({});
   const [presence, setPresence] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
@@ -115,6 +112,26 @@ export default function AuditTasks() {
       .toLowerCase();
     return searchBlob.includes(normalizedQuery);
   });
+  const mentionCandidates = Array.from(
+    new Set(
+      [
+        actorName,
+        ...presence.map((person) => person.actorName),
+        ...activity.map((event) => event.actorName),
+        ...discussions.map((discussion) => discussion.authorName),
+      ]
+        .map((name) => String(name || "").trim())
+        .filter(Boolean)
+    )
+  )
+    .map((name) => {
+      const handle = name
+        .toLowerCase()
+        .replace(/\s+/g, ".")
+        .replace(/[^a-z0-9._-]/g, "");
+      return { label: name, handle };
+    })
+    .filter((candidate) => candidate.handle.length > 0);
 
   function updateRowLocal(id, key, value) {
     setRows((prevRows) =>
@@ -158,7 +175,6 @@ export default function AuditTasks() {
       }
       setActivity(data.activity || []);
       setDiscussions(data.discussions || []);
-      setNotifications((data.notifications || []).filter((n) => !n.isRead));
       setPresence(data.presence || []);
       setLock(data.lock || null);
     } catch (loadError) {
@@ -592,37 +608,6 @@ export default function AuditTasks() {
     }
   }
 
-  async function markNotificationReadById(notificationId) {
-    if (!selectedCompanyId || !actorId || !actorName.trim()) {
-      return;
-    }
-    setNotificationBusyById((prev) => ({ ...prev, [notificationId]: true }));
-    try {
-      const response = await fetch("/api/audit-tasks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "mark_notification_read",
-          companyId: selectedCompanyId,
-          actorId,
-          actorName,
-          notificationId,
-        }),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Could not mark notification as read.");
-      }
-      setNotifications((prev) =>
-        prev.filter((notification) => notification.id !== String(notificationId))
-      );
-    } catch (notificationError) {
-      setError(notificationError.message || "Could not mark notification as read.");
-    } finally {
-      setNotificationBusyById((prev) => ({ ...prev, [notificationId]: false }));
-    }
-  }
-
   return (
     <>
       <Head>
@@ -681,12 +666,6 @@ export default function AuditTasks() {
         />
 
         <PresencePanel styles={styles} presence={presence} actorId={actorId} />
-        <NotificationsPanel
-          styles={styles}
-          notifications={notifications}
-          onMarkRead={markNotificationReadById}
-          markBusyById={notificationBusyById}
-        />
 
         <div style={styles.tabsRow}>
           <button
@@ -740,6 +719,7 @@ export default function AuditTasks() {
             discussions={discussions}
             onAddTaskDiscussion={addTaskDiscussion}
             discussionBusyByTask={discussionBusyByTask}
+            mentionCandidates={mentionCandidates}
           />
         ) : activeTab === "risk_responsibility" ? (
           <RiskResponsibilityTab

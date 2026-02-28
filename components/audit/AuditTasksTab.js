@@ -19,9 +19,11 @@ export default function AuditTasksTab({
   discussions,
   onAddTaskDiscussion,
   discussionBusyByTask,
+  mentionCandidates,
 }) {
   const [openTaskId, setOpenTaskId] = useState("");
   const [draftByTask, setDraftByTask] = useState({});
+  const [mentionQueryByTask, setMentionQueryByTask] = useState({});
   const discussionMap = useMemo(() => {
     const map = new Map();
     (discussions || []).forEach((d) => {
@@ -36,6 +38,23 @@ export default function AuditTasksTab({
     return draftByTask[taskId] || "";
   }
 
+  function getMentionQuery(taskId, text) {
+    const source = String(text || "");
+    const match = source.match(/@([a-zA-Z0-9._-]{0,50})$/);
+    return match ? match[1].toLowerCase() : "";
+  }
+
+  function setDraft(taskId, text) {
+    setDraftByTask((prev) => ({ ...prev, [taskId]: text }));
+    setMentionQueryByTask((prev) => ({ ...prev, [taskId]: getMentionQuery(taskId, text) }));
+  }
+
+  function applyMention(taskId, handle) {
+    const source = getDraft(taskId);
+    const next = source.replace(/@([a-zA-Z0-9._-]{0,50})$/, `@${handle} `);
+    setDraft(taskId, next);
+  }
+
   async function submitDiscussion(taskId) {
     const text = getDraft(taskId).trim();
     if (!text) {
@@ -44,6 +63,7 @@ export default function AuditTasksTab({
     const ok = await onAddTaskDiscussion(taskId, text);
     if (ok) {
       setDraftByTask((prev) => ({ ...prev, [taskId]: "" }));
+      setMentionQueryByTask((prev) => ({ ...prev, [taskId]: "" }));
     }
   }
 
@@ -78,9 +98,9 @@ export default function AuditTasksTab({
               <th style={styles.th}>Robot processed</th>
               <th style={styles.th}>Status</th>
               <th style={styles.th}>Comment</th>
-              <th style={styles.th}>Discussion</th>
               <th style={styles.th}>Evidence / output</th>
               <th style={styles.th}>Last updated</th>
+              <th style={styles.th}>Discussion</th>
             </tr>
           </thead>
           <tbody>
@@ -140,6 +160,13 @@ export default function AuditTasksTab({
                       />
                     </td>
                     <td style={styles.td}>
+                      {r.evidence}
+                    </td>
+                    <td style={styles.tdMono}>
+                      {r.lastUpdated}
+                      <span style={styles.savingSlot}>{savingById[r.id] ? " saving..." : ""}</span>
+                    </td>
+                    <td style={styles.td}>
                       <button
                         type="button"
                         style={styles.discussionToggleButton}
@@ -147,11 +174,6 @@ export default function AuditTasksTab({
                       >
                         {isOpen ? "Hide thread" : `Open thread (${taskDiscussions.length})`}
                       </button>
-                    </td>
-                    <td style={styles.td}>{r.evidence}</td>
-                    <td style={styles.tdMono}>
-                      {r.lastUpdated}
-                      <span style={styles.savingSlot}>{savingById[r.id] ? " saving..." : ""}</span>
                     </td>
                   </tr>,
                   isOpen ? (
@@ -177,16 +199,37 @@ export default function AuditTasksTab({
                               style={styles.discussionTextarea}
                               placeholder="Add discussion comment. Mention with @name"
                               value={getDraft(r.id)}
-                              onChange={(e) =>
-                                setDraftByTask((prev) => ({ ...prev, [r.id]: e.target.value }))
-                              }
-                              disabled={!canEdit}
+                              onChange={(e) => setDraft(r.id, e.target.value)}
                               rows={2}
                             />
+                            {mentionQueryByTask[r.id] && (
+                              <div style={styles.mentionSuggestions}>
+                                {(mentionCandidates || [])
+                                  .filter((candidate) =>
+                                    candidate.handle
+                                      .toLowerCase()
+                                      .includes(mentionQueryByTask[r.id].toLowerCase())
+                                  )
+                                  .slice(0, 6)
+                                  .map((candidate) => (
+                                    <button
+                                      key={candidate.handle}
+                                      type="button"
+                                      style={styles.mentionSuggestionItem}
+                                      onClick={() => applyMention(r.id, candidate.handle)}
+                                    >
+                                      @{candidate.handle}
+                                      <span style={styles.mentionSuggestionName}>
+                                        {candidate.label}
+                                      </span>
+                                    </button>
+                                  ))}
+                              </div>
+                            )}
                             <button
                               type="button"
                               style={styles.discussionSendButton}
-                              disabled={!canEdit || Boolean(discussionBusyByTask[r.id])}
+                              disabled={Boolean(discussionBusyByTask[r.id])}
                               onClick={() => submitDiscussion(r.id)}
                             >
                               {discussionBusyByTask[r.id] ? "Posting..." : "Post"}
