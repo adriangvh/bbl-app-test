@@ -21,27 +21,28 @@ function getTodayIso() {
 function buildDefaultSigningDocument(company) {
   const companyName = company?.name || "Unknown Company";
   const orgNo = company?.organizationNumber || "Unknown";
-  return [
-    "1. Engagement Summary",
-    `This signing memorandum covers the annual audit for ${companyName} (${orgNo}).`,
-    "",
-    "2. Scope Performed",
-    "- Financial statement procedures completed.",
-    "- Risk and control testing reviewed.",
-    "- Outstanding exceptions discussed with management.",
-    "",
-    "3. Key Findings",
-    "- No material misstatements identified.",
-    "- Significant estimates reviewed and documented.",
-    "- Final management representation received.",
-    "",
-    "4. Partner Conclusion",
-    "Based on the completed procedures and review evidence, the engagement is considered ready for final signing.",
-    "",
-    "5. Notes Before Signing",
-    "- Add any final partner comments here.",
-    "- Add any conditions for follow-up in next cycle.",
-  ].join("\n");
+  return `
+<h2>1. Engagement Summary</h2>
+<p>This signing document covers the annual audit for <strong>${companyName}</strong> (${orgNo}).</p>
+<h2>2. Scope Performed</h2>
+<ul>
+  <li>Financial statement procedures completed.</li>
+  <li>Risk and control testing reviewed.</li>
+  <li>Outstanding exceptions discussed with management.</li>
+</ul>
+<h2>3. Key Findings</h2>
+<ul>
+  <li>No material misstatements identified.</li>
+  <li>Significant estimates reviewed and documented.</li>
+  <li>Final management representation received.</li>
+</ul>
+<h2>4. Partner Conclusion</h2>
+<p>Based on the completed procedures and review evidence, the engagement is considered ready for final signing.</p>
+<h2>5. Notes Before Signing</h2>
+<ul>
+  <li>Add any final partner comments here.</li>
+  <li>Add any conditions for follow-up in next cycle.</li>
+</ul>`.trim();
 }
 
 export default function AuditTasks() {
