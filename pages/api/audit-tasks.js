@@ -6,6 +6,7 @@ import {
   releaseCompanyLock,
   renewCompanyLock,
   sendCompanyToSigning,
+  updateCompanyRiskChecklist,
   updateTask,
 } from "../../lib/auditTasksStore";
 
@@ -109,6 +110,17 @@ export default async function handler(req, res) {
       result = await advanceCompanyStage(companyId, actorId, actorRole);
     } else if (action === "send_to_signing") {
       result = await sendCompanyToSigning(companyId, actorId, actorRole);
+    } else if (action === "update_risk_checklist") {
+      const { field, value } = req.body || {};
+      if (!field || typeof field !== "string") {
+        res.status(400).json({ error: "Missing or invalid field." });
+        return;
+      }
+      if (typeof value !== "boolean") {
+        res.status(400).json({ error: "Missing or invalid value." });
+        return;
+      }
+      result = await updateCompanyRiskChecklist(companyId, actorId, field, value);
     } else {
       res.status(400).json({ error: "Invalid action." });
       return;

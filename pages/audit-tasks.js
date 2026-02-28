@@ -3,18 +3,13 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import AuditTasksTab from "../components/audit/AuditTasksTab";
+import ActivityTimeline from "../components/audit/ActivityTimeline";
 import CompanyLockBar from "../components/audit/CompanyLockBar";
 import CompanyInfoCard from "../components/audit/CompanyInfoCard";
 import RiskResponsibilityTab from "../components/audit/RiskResponsibilityTab";
 import { styles } from "../components/audit/auditTasksStyles";
 
 const TASKS_POLL_MS = 5000;
-const DEFAULT_RISK_RESPONSES = {
-  overall_risk_assessed: "",
-  fraud_risk_documented: "",
-  controls_tested: "",
-  partner_review_ready: "",
-};
 
 function getTodayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -23,6 +18,7 @@ function getTodayIso() {
 export default function AuditTasks() {
   const router = useRouter();
   const [rows, setRows] = useState([]);
+  const [activity, setActivity] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
   const [lock, setLock] = useState(null);
@@ -41,7 +37,6 @@ export default function AuditTasks() {
   const [taskQuery, setTaskQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [activeTab, setActiveTab] = useState("audit_tasks");
-  const [riskResponses, setRiskResponses] = useState(DEFAULT_RISK_RESPONSES);
 
   const holdsLock = Boolean(lock && actorId && lock.actorId === actorId);
   const canEdit = holdsLock;
@@ -63,6 +58,32 @@ export default function AuditTasks() {
   const showNextStageButton =
     !isFinalReviewOrLater && !(isAuditor && currentStage !== "First time auditing");
   const showSendToSigningButton = isPartner && currentStage === "Partner review";
+  const riskResponses = {
+    overall_risk_assessed:
+      selectedCompany?.overallRiskAssessed === true
+        ? "yes"
+        : selectedCompany?.overallRiskAssessed === false
+        ? "no"
+        : "",
+    fraud_risk_documented:
+      selectedCompany?.fraudRiskDocumented === true
+        ? "yes"
+        : selectedCompany?.fraudRiskDocumented === false
+        ? "no"
+        : "",
+    controls_tested:
+      selectedCompany?.controlsTested === true
+        ? "yes"
+        : selectedCompany?.controlsTested === false
+        ? "no"
+        : "",
+    partner_review_ready:
+      selectedCompany?.partnerReviewReady === true
+        ? "yes"
+        : selectedCompany?.partnerReviewReady === false
+        ? "no"
+        : "",
+  };
 
   const normalizedQuery = taskQuery.trim().toLowerCase();
   const filteredRows = rows.filter((row) => {
@@ -124,6 +145,7 @@ export default function AuditTasks() {
       if (!(silent && isTypingComment)) {
         setRows(data.tasks || []);
       }
+      setActivity(data.activity || []);
       setLock(data.lock || null);
     } catch (loadError) {
       if (!silent) {
@@ -209,34 +231,44 @@ export default function AuditTasks() {
     return () => clearTimeout(timer);
   }, [stageJustAdvanced]);
 
-  useEffect(() => {
-    if (typeof window === "undefined" || !selectedCompanyId) {
-      return;
-    }
-    const raw = window.localStorage.getItem(`riskResponses:${selectedCompanyId}`);
-    if (!raw) {
-      setRiskResponses(DEFAULT_RISK_RESPONSES);
-      return;
-    }
-    try {
-      const parsed = JSON.parse(raw);
-      setRiskResponses({ ...DEFAULT_RISK_RESPONSES, ...parsed });
-    } catch {
-      setRiskResponses(DEFAULT_RISK_RESPONSES);
-    }
-  }, [selectedCompanyId]);
-
-  function updateRiskResponse(key, value) {
+  async function updateRiskResponse(key, value) {
     if (!holdsLock || !selectedCompanyId) {
       return;
     }
-    setRiskResponses((prev) => {
-      const next = { ...prev, [key]: value };
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(`riskResponses:${selectedCompanyId}`, JSON.stringify(next));
+    const boolValue = value === "yes";
+    setError("");
+    try {
+      const response = await fetch("/api/audit-tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update_risk_checklist",
+          companyId: selectedCompanyId,
+          actorId,
+          field: key,
+          value: boolValue,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        if (data.lock !== undefined) {
+          setLock(data.lock);
+        }
+        throw new Error(data.error || "Could not update risk checklist.");
       }
-      return next;
-    });
+      if (data.company) {
+        setCompanies((prev) =>
+          prev.map((company) =>
+            company.id === data.company.id ? { ...company, ...data.company } : company
+          )
+        );
+      }
+      if (data.lock !== undefined) {
+        setLock(data.lock);
+      }
+    } catch (updateError) {
+      setError(updateError.message || "Could not update risk checklist.");
+    }
   }
 
   async function persistPatch(id, patch, fallbackRow, companyId) {
@@ -543,6 +575,10 @@ export default function AuditTasks() {
             canEdit={holdsLock}
           />
         )}
+
+        <div style={{ marginTop: "1rem" }}>
+          <ActivityTimeline styles={styles} activity={activity} />
+        </div>
       </main>
     </>
   );

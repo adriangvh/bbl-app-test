@@ -14,6 +14,12 @@ create table if not exists public.audit_companies (
 alter table public.audit_companies
 add column if not exists audit_stage text not null default 'First time auditing';
 
+alter table public.audit_companies
+add column if not exists overall_risk_assessed boolean,
+add column if not exists fraud_risk_documented boolean,
+add column if not exists controls_tested boolean,
+add column if not exists partner_review_ready boolean;
+
 create table if not exists public.audit_tasks (
   id text primary key,
   company_id text not null references public.audit_companies(id) on delete cascade,
@@ -41,6 +47,19 @@ create table if not exists public.audit_locks (
 );
 
 create index if not exists audit_locks_expires_idx on public.audit_locks(expires_at);
+
+create table if not exists public.audit_activity_events (
+  id bigint generated always as identity primary key,
+  company_id text not null references public.audit_companies(id) on delete cascade,
+  actor_id text not null,
+  actor_name text not null,
+  event_type text not null,
+  message text not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists audit_activity_events_company_created_idx
+on public.audit_activity_events(company_id, created_at desc);
 
 create or replace function public.set_updated_at_audit_locks()
 returns trigger
