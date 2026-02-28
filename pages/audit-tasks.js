@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 
+const TASKS_POLL_MS = 5000;
+
 function getTodayIso() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -70,10 +72,13 @@ export default function AuditTasks() {
     );
   }
 
-  async function loadRows(companyId) {
-    setLoading(true);
-    setError("");
-    setSavingById({});
+  async function loadRows(companyId, options = {}) {
+    const { silent = false } = options;
+    if (!silent) {
+      setLoading(true);
+      setError("");
+      setSavingById({});
+    }
     try {
       const params = new URLSearchParams();
       if (companyId) {
@@ -87,12 +92,22 @@ export default function AuditTasks() {
       const data = await response.json();
       setCompanies(data.companies || []);
       setSelectedCompanyId(data.selectedCompanyId || "");
-      setRows(data.tasks || []);
+      const isTypingComment =
+        typeof document !== "undefined" &&
+        document.activeElement &&
+        document.activeElement.tagName === "TEXTAREA";
+      if (!(silent && isTypingComment)) {
+        setRows(data.tasks || []);
+      }
       setLock(data.lock || null);
     } catch (loadError) {
-      setError(loadError.message || "Could not load tasks.");
+      if (!silent) {
+        setError(loadError.message || "Could not load tasks.");
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }
 
@@ -138,6 +153,19 @@ export default function AuditTasks() {
     }, 60 * 1000);
     return () => clearInterval(interval);
   }, [holdsLock, selectedCompanyId, actorId]);
+
+  useEffect(() => {
+    if (!selectedCompanyId) {
+      return;
+    }
+    const timer = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        return;
+      }
+      loadRows(selectedCompanyId, { silent: true });
+    }, TASKS_POLL_MS);
+    return () => clearInterval(timer);
+  }, [selectedCompanyId]);
 
   async function persistPatch(id, patch, fallbackRow, companyId) {
     if (!companyId || !actorId) {

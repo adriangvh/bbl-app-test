@@ -2,6 +2,8 @@ import Head from "next/head";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+const COMPANIES_POLL_MS = 5000;
+
 function formatLock(lock) {
   if (!lock) {
     return "Unlocked";
@@ -68,8 +70,11 @@ export default function Home() {
 
   useEffect(() => {
     const timer = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        return;
+      }
       loadCompanies({ silent: true });
-    }, 20000);
+    }, COMPANIES_POLL_MS);
     return () => clearInterval(timer);
   }, []);
 
