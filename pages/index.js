@@ -90,6 +90,7 @@ export default function Home() {
   const [employeeType, setEmployeeType] = useState("auditor");
   const [busyCompanyId, setBusyCompanyId] = useState("");
   const [busyDueCompanyId, setBusyDueCompanyId] = useState("");
+  const [showAlerts, setShowAlerts] = useState(false);
 
   const canEditDueDate = employeeType === "manager" || employeeType === "partner";
 
@@ -334,9 +335,22 @@ export default function Home() {
               Claim a company lock here, set due dates, and open the audit workspace.
             </p>
           </div>
-          <Link href="/dashboard" style={styles.dashboardLink}>
-            Open Dashboard
-          </Link>
+          <div style={styles.topActions}>
+            <button
+              type="button"
+              style={styles.bellButton}
+              onClick={() => setShowAlerts((prev) => !prev)}
+              aria-label="Toggle alerts"
+            >
+              <span style={styles.bellIcon}>🔔</span>
+              {notifications.length > 0 && (
+                <span style={styles.bellBadge}>+{notifications.length}</span>
+              )}
+            </button>
+            <Link href="/dashboard" style={styles.dashboardLink}>
+              Open Dashboard
+            </Link>
+          </div>
         </div>
 
         <div style={styles.sessionRow}>
@@ -361,46 +375,54 @@ export default function Home() {
           </div>
         </div>
 
-        {notifications.length > 0 && (
+        {showAlerts && (
           <section style={styles.notificationsWrap}>
             <div style={styles.notificationsHeader}>
               <span style={styles.notificationsTitle}>Alerts</span>
               <span style={styles.notificationsCount}>{notifications.length}</span>
             </div>
-            <div style={styles.notificationsList}>
-              {notifications.map((notification) => (
-                <div key={notification.id} style={styles.notificationItem}>
-                  <div style={styles.notificationMessage}>{notification.message}</div>
-                  <div style={styles.notificationMeta}>
-                    <span>{notification.companyName}</span>
-                    <span>•</span>
-                    <span>From {notification.senderName}</span>
+            {actorName.trim().length < 2 ? (
+              <div style={styles.notificationsEmpty}>
+                Enter your name to load your mention alerts.
+              </div>
+            ) : notifications.length === 0 ? (
+              <div style={styles.notificationsEmpty}>No unread alerts.</div>
+            ) : (
+              <div style={styles.notificationsList}>
+                {notifications.map((notification) => (
+                  <div key={notification.id} style={styles.notificationItem}>
+                    <div style={styles.notificationMessage}>{notification.message}</div>
+                    <div style={styles.notificationMeta}>
+                      <span>{notification.companyName}</span>
+                      <span>•</span>
+                      <span>From {notification.senderName}</span>
+                    </div>
+                    <div style={styles.notificationActions}>
+                      <Link
+                        href={{
+                          pathname: "/audit-tasks",
+                          query: {
+                            companyId: notification.companyId,
+                            companyName: notification.companyName,
+                          },
+                        }}
+                        style={styles.notificationOpenLink}
+                      >
+                        Open company
+                      </Link>
+                      <button
+                        type="button"
+                        style={styles.notificationReadButton}
+                        disabled={Boolean(notificationBusyById[notification.id])}
+                        onClick={() => markNotificationRead(notification.id)}
+                      >
+                        {notificationBusyById[notification.id] ? "Saving..." : "Mark as read"}
+                      </button>
+                    </div>
                   </div>
-                  <div style={styles.notificationActions}>
-                    <Link
-                      href={{
-                        pathname: "/audit-tasks",
-                        query: {
-                          companyId: notification.companyId,
-                          companyName: notification.companyName,
-                        },
-                      }}
-                      style={styles.notificationOpenLink}
-                    >
-                      Open company
-                    </Link>
-                    <button
-                      type="button"
-                      style={styles.notificationReadButton}
-                      disabled={Boolean(notificationBusyById[notification.id])}
-                      onClick={() => markNotificationRead(notification.id)}
-                    >
-                      {notificationBusyById[notification.id] ? "Saving..." : "Mark as read"}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </section>
         )}
 
@@ -575,6 +597,44 @@ const styles = {
     gap: "1rem",
     flexWrap: "wrap",
   },
+  topActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: ".55rem",
+  },
+  bellButton: {
+    position: "relative",
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    border: "1px solid #d1d5db",
+    background: "#fff",
+    cursor: "pointer",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bellIcon: {
+    fontSize: 18,
+    lineHeight: 1,
+  },
+  bellBadge: {
+    position: "absolute",
+    top: -8,
+    right: -10,
+    minWidth: 24,
+    height: 20,
+    borderRadius: 999,
+    border: "1px solid #fdba74",
+    background: "#fff7ed",
+    color: "#9a3412",
+    fontSize: 11,
+    fontWeight: 700,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "0 .3rem",
+  },
   dashboardLink: {
     display: "inline-flex",
     alignItems: "center",
@@ -623,6 +683,14 @@ const styles = {
   notificationsList: {
     display: "grid",
     gap: ".45rem",
+  },
+  notificationsEmpty: {
+    fontSize: 13,
+    color: "#9a3412",
+    background: "#fff",
+    border: "1px dashed #fdba74",
+    borderRadius: 10,
+    padding: ".55rem .6rem",
   },
   notificationItem: {
     border: "1px solid #fdba74",
