@@ -6,10 +6,12 @@ import AuditTasksTab from "../components/audit/AuditTasksTab";
 import ActivityTimeline from "../components/audit/ActivityTimeline";
 import CompanyLockBar from "../components/audit/CompanyLockBar";
 import CompanyInfoCard from "../components/audit/CompanyInfoCard";
+import PresencePanel from "../components/audit/PresencePanel";
 import RiskResponsibilityTab from "../components/audit/RiskResponsibilityTab";
 import { styles } from "../components/audit/auditTasksStyles";
 
 const TASKS_POLL_MS = 5000;
+const PRESENCE_PING_MS = 10000;
 
 function getTodayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -19,6 +21,7 @@ export default function AuditTasks() {
   const router = useRouter();
   const [rows, setRows] = useState([]);
   const [activity, setActivity] = useState([]);
+  const [presence, setPresence] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
   const [lock, setLock] = useState(null);
@@ -146,6 +149,7 @@ export default function AuditTasks() {
         setRows(data.tasks || []);
       }
       setActivity(data.activity || []);
+      setPresence(data.presence || []);
       setLock(data.lock || null);
     } catch (loadError) {
       if (!silent) {
@@ -230,6 +234,70 @@ export default function AuditTasks() {
     }, 1700);
     return () => clearTimeout(timer);
   }, [stageJustAdvanced]);
+
+  async function pingPresence(tab = activeTab) {
+    if (!selectedCompanyId || !actorId) {
+      return;
+    }
+    try {
+      await fetch("/api/audit-tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "presence_ping",
+          companyId: selectedCompanyId,
+          actorId,
+          actorName,
+          actorRole,
+          activeTab: tab,
+        }),
+      });
+    } catch {
+      // Presence is best effort.
+    }
+  }
+
+  function leavePresence() {
+    if (!selectedCompanyId || !actorId) {
+      return;
+    }
+    fetch("/api/audit-tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "presence_leave",
+        companyId: selectedCompanyId,
+        actorId,
+      }),
+      keepalive: true,
+    }).catch(() => {});
+  }
+
+  useEffect(() => {
+    if (!selectedCompanyId || !actorId) {
+      return;
+    }
+    pingPresence(activeTab);
+    const timer = setInterval(() => {
+      pingPresence(activeTab);
+    }, PRESENCE_PING_MS);
+    return () => clearInterval(timer);
+  }, [selectedCompanyId, actorId, actorName, actorRole, activeTab]);
+
+  useEffect(() => {
+    const onPageHide = () => leavePresence();
+    if (typeof window !== "undefined") {
+      window.addEventListener("pagehide", onPageHide);
+      window.addEventListener("beforeunload", onPageHide);
+    }
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("pagehide", onPageHide);
+        window.removeEventListener("beforeunload", onPageHide);
+      }
+      leavePresence();
+    };
+  }, [selectedCompanyId, actorId]);
 
   async function updateRiskResponse(key, value) {
     if (!holdsLock || !selectedCompanyId) {
@@ -525,6 +593,8 @@ export default function AuditTasks() {
           selectedCompanyId={selectedCompanyId}
           onUpdateLock={updateLock}
         />
+
+        <PresencePanel styles={styles} presence={presence} actorId={actorId} />
 
         <div style={styles.tabsRow}>
           <button

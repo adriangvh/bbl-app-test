@@ -5,7 +5,9 @@ import {
   getAuditData,
   releaseCompanyLock,
   renewCompanyLock,
+  removePresence,
   sendCompanyToSigning,
+  upsertPresence,
   updateCompanyRiskChecklist,
   updateTask,
 } from "../../lib/auditTasksStore";
@@ -121,6 +123,17 @@ export default async function handler(req, res) {
         return;
       }
       result = await updateCompanyRiskChecklist(companyId, actorId, field, value);
+    } else if (action === "presence_ping") {
+      const { activeTab } = req.body || {};
+      result = await upsertPresence(
+        companyId,
+        actorId,
+        typeof actorName === "string" ? actorName : "",
+        typeof actorRole === "string" ? actorRole : "auditor",
+        typeof activeTab === "string" ? activeTab : "audit_tasks"
+      );
+    } else if (action === "presence_leave") {
+      result = await removePresence(companyId, actorId);
     } else {
       res.status(400).json({ error: "Invalid action." });
       return;
@@ -134,6 +147,7 @@ export default async function handler(req, res) {
     res.status(200).json({
       lock: result.lock || null,
       company: result.company || null,
+      presence: result.presence || null,
     });
     return;
   }

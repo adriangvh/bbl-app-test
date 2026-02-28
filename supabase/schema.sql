@@ -61,6 +61,20 @@ create table if not exists public.audit_activity_events (
 create index if not exists audit_activity_events_company_created_idx
 on public.audit_activity_events(company_id, created_at desc);
 
+create table if not exists public.audit_presence (
+  company_id text not null references public.audit_companies(id) on delete cascade,
+  actor_id text not null,
+  actor_name text not null,
+  actor_role text not null,
+  active_tab text not null,
+  last_seen_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (company_id, actor_id)
+);
+
+create index if not exists audit_presence_company_seen_idx
+on public.audit_presence(company_id, last_seen_at desc);
+
 create or replace function public.set_updated_at_audit_locks()
 returns trigger
 language plpgsql
