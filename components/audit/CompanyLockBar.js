@@ -51,7 +51,7 @@ export default function CompanyLockBar({
       )}
       <span style={styles.lockText}>
         {holdsLock
-          ? `Locked by you until ${new Date(lock.expiresAt).toLocaleTimeString()}`
+          ? "Locked by you"
           : lock
           ? `Locked by ${lock.actorName}`
           : "No lock active"}
