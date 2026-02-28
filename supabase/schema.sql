@@ -18,7 +18,8 @@ alter table public.audit_companies
 add column if not exists overall_risk_assessed boolean,
 add column if not exists fraud_risk_documented boolean,
 add column if not exists controls_tested boolean,
-add column if not exists partner_review_ready boolean;
+add column if not exists partner_review_ready boolean,
+add column if not exists task_due_date date;
 
 create table if not exists public.audit_tasks (
   id text primary key,

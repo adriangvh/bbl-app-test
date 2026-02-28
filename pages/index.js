@@ -1,6 +1,6 @@
 import Head from "next/head";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const COMPANIES_POLL_MS = 5000;
 const AUDIT_STAGES = [
@@ -10,6 +10,10 @@ const AUDIT_STAGES = [
   "Partner review",
   "Signing",
 ];
+
+function getTodayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 function getStageChipStyle(stage) {
   const palette = {
@@ -53,17 +57,39 @@ function formatLock(lock) {
   return `Locked by ${lock.actorName}`;
 }
 
+function isOverdue(company) {
+  return Boolean(
+    company.taskDueDate &&
+      company.taskDueDate < getTodayIso() &&
+      company.auditStage !== "Signing"
+  );
+}
+
+function isDueSoon(company) {
+  if (!company.taskDueDate) {
+    return false;
+  }
+  const today = new Date(`${getTodayIso()}T00:00:00`);
+  const due = new Date(`${company.taskDueDate}T00:00:00`);
+  const diffDays = Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  return diffDays >= 0 && diffDays <= 7;
+}
+
 export default function Home() {
   const [companies, setCompanies] = useState([]);
   const [groupFilter, setGroupFilter] = useState("all");
   const [stageFilter, setStageFilter] = useState("all");
   const [lockFilter, setLockFilter] = useState("all");
+  const [dueFilter, setDueFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [actorId, setActorId] = useState("");
   const [actorName, setActorName] = useState("");
   const [employeeType, setEmployeeType] = useState("auditor");
   const [busyCompanyId, setBusyCompanyId] = useState("");
+  const [busyDueCompanyId, setBusyDueCompanyId] = useState("");
+
+  const canEditDueDate = employeeType === "manager" || employeeType === "partner";
 
   async function loadCompanies(options = {}) {
     const { silent = false } = options;
@@ -171,27 +197,72 @@ export default function Home() {
     }
   }
 
-  const groupOptions = Array.from(new Set(companies.map((company) => company.group))).sort();
-  const stageOptions = AUDIT_STAGES.filter((stage) =>
-    companies.some((company) => company.auditStage === stage)
+  async function updateCompanyDueDate(companyId, dueDate) {
+    if (!canEditDueDate) {
+      return;
+    }
+    setBusyDueCompanyId(companyId);
+    setError("");
+    try {
+      const response = await fetch("/api/audit-companies", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId,
+          dueDate: dueDate || null,
+          actorRole: employeeType,
+          actorId,
+          actorName,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Could not update due date.");
+      }
+      if (data.company) {
+        setCompanies((prevCompanies) =>
+          prevCompanies.map((company) =>
+            company.id === companyId ? { ...company, ...data.company } : company
+          )
+        );
+      }
+    } catch (dueError) {
+      setError(dueError.message || "Could not update due date.");
+    } finally {
+      setBusyDueCompanyId("");
+    }
+  }
+
+  const groupOptions = useMemo(
+    () => Array.from(new Set(companies.map((company) => company.group))).sort(),
+    [companies]
   );
-  const matchesLockFilter = (company) => {
-    if (lockFilter === "all") {
-      return true;
-    }
-    if (lockFilter === "locked") {
-      return Boolean(company.lock);
-    }
-    if (lockFilter === "unlocked") {
-      return !company.lock;
-    }
-    return true;
-  };
-  const filteredCompanies = companies.filter((company) =>
-    (groupFilter === "all" ? true : company.group === groupFilter) &&
-    (stageFilter === "all" ? true : company.auditStage === stageFilter) &&
-    matchesLockFilter(company)
+  const stageOptions = useMemo(
+    () => AUDIT_STAGES.filter((stage) => companies.some((company) => company.auditStage === stage)),
+    [companies]
   );
+
+  const filteredCompanies = companies.filter((company) => {
+    const matchGroup = groupFilter === "all" ? true : company.group === groupFilter;
+    const matchStage = stageFilter === "all" ? true : company.auditStage === stageFilter;
+    const matchLock =
+      lockFilter === "all"
+        ? true
+        : lockFilter === "locked"
+        ? Boolean(company.lock)
+        : !company.lock;
+    const matchDue =
+      dueFilter === "all"
+        ? true
+        : dueFilter === "overdue"
+        ? isOverdue(company)
+        : dueFilter === "due_soon"
+        ? isDueSoon(company)
+        : dueFilter === "has_due"
+        ? Boolean(company.taskDueDate)
+        : !company.taskDueDate;
+    return matchGroup && matchStage && matchLock && matchDue;
+  });
 
   return (
     <>
@@ -201,13 +272,20 @@ export default function Home() {
       </Head>
 
       <main>
-        <h1 style={{ marginTop: 0 }}>Audit Companies</h1>
-        <p style={{ color: "#4b5563", marginTop: ".35rem" }}>
-          Claim a company lock here, then open its audit task board.
-        </p>
+        <div style={styles.pageTopRow}>
+          <div>
+            <h1 style={{ marginTop: 0, marginBottom: ".3rem" }}>Audit Companies</h1>
+            <p style={{ color: "#4b5563", marginTop: 0 }}>
+              Claim a company lock here, set due dates, and open the audit workspace.
+            </p>
+          </div>
+          <Link href="/dashboard" style={styles.dashboardLink}>
+            Open Dashboard
+          </Link>
+        </div>
 
         <div style={styles.sessionRow}>
-          <span style={styles.sessionLabel}>Auditor name</span>
+          <span style={styles.sessionLabel}>Name</span>
           <input
             style={styles.nameInput}
             placeholder="Your name"
@@ -231,11 +309,7 @@ export default function Home() {
         <div style={styles.headerRow}>
           <div style={styles.filterField}>
             <span style={styles.filterLabel}>Group</span>
-            <select
-              style={styles.filterSelect}
-              value={groupFilter}
-              onChange={(e) => setGroupFilter(e.target.value)}
-            >
+            <select style={styles.filterSelect} value={groupFilter} onChange={(e) => setGroupFilter(e.target.value)}>
               <option value="all">All groups</option>
               {groupOptions.map((group) => (
                 <option key={group} value={group}>
@@ -246,11 +320,7 @@ export default function Home() {
           </div>
           <div style={styles.filterField}>
             <span style={styles.filterLabel}>Stage</span>
-            <select
-              style={styles.filterSelect}
-              value={stageFilter}
-              onChange={(e) => setStageFilter(e.target.value)}
-            >
+            <select style={styles.filterSelect} value={stageFilter} onChange={(e) => setStageFilter(e.target.value)}>
               <option value="all">All stages</option>
               {stageOptions.map((stage) => (
                 <option key={stage} value={stage}>
@@ -261,14 +331,20 @@ export default function Home() {
           </div>
           <div style={styles.filterField}>
             <span style={styles.filterLabel}>Lock</span>
-            <select
-              style={styles.filterSelect}
-              value={lockFilter}
-              onChange={(e) => setLockFilter(e.target.value)}
-            >
+            <select style={styles.filterSelect} value={lockFilter} onChange={(e) => setLockFilter(e.target.value)}>
               <option value="all">All lock states</option>
               <option value="locked">Locked</option>
               <option value="unlocked">Unlocked</option>
+            </select>
+          </div>
+          <div style={styles.filterField}>
+            <span style={styles.filterLabel}>Due date</span>
+            <select style={styles.filterSelect} value={dueFilter} onChange={(e) => setDueFilter(e.target.value)}>
+              <option value="all">All due dates</option>
+              <option value="overdue">Overdue</option>
+              <option value="due_soon">Due in 7 days</option>
+              <option value="has_due">Has due date</option>
+              <option value="no_due">No due date</option>
             </select>
           </div>
         </div>
@@ -283,6 +359,7 @@ export default function Home() {
                 <th style={styles.th}>Organization no.</th>
                 <th style={styles.th}>Group</th>
                 <th style={styles.th}>Stage</th>
+                <th style={styles.th}>Due date</th>
                 <th style={styles.th}>Tasks</th>
                 <th style={styles.th}>Lock status</th>
                 <th style={styles.th}>Actions</th>
@@ -291,90 +368,99 @@ export default function Home() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td style={styles.td} colSpan={7}>
+                  <td style={styles.td} colSpan={8}>
                     Loading companies...
                   </td>
                 </tr>
               ) : filteredCompanies.length === 0 ? (
                 <tr>
-                  <td style={styles.td} colSpan={7}>
-                    No companies in this group.
+                  <td style={styles.td} colSpan={8}>
+                    No companies match your filters.
                   </td>
                 </tr>
-              ) : filteredCompanies.map((company) => {
-                const holdsLock = Boolean(company.lock && company.lock.actorId === actorId);
-                const lockedByOther = Boolean(company.lock && company.lock.actorId !== actorId);
-                const canClaim = actorName.trim().length >= 2 && !company.lock;
-                const canForceRelease =
-                  lockedByOther &&
-                  (employeeType === "manager" || employeeType === "partner");
-                const lockAction = holdsLock
-                  ? "release"
-                  : canForceRelease
-                  ? "force_release"
-                  : "claim";
-                const lockLabel = holdsLock
-                  ? "Release lock"
-                  : canForceRelease
-                  ? "Release other lock"
-                  : "Claim lock";
-                const disableLockButton = busyCompanyId === company.id || !canClaim;
+              ) : (
+                filteredCompanies.map((company) => {
+                  const overdue = isOverdue(company);
+                  const holdsLock = Boolean(company.lock && company.lock.actorId === actorId);
+                  const lockedByOther = Boolean(company.lock && company.lock.actorId !== actorId);
+                  const canClaim = actorName.trim().length >= 2 && !company.lock;
+                  const canForceRelease =
+                    lockedByOther && (employeeType === "manager" || employeeType === "partner");
+                  const lockAction = holdsLock
+                    ? "release"
+                    : canForceRelease
+                    ? "force_release"
+                    : "claim";
+                  const lockLabel = holdsLock
+                    ? "Release lock"
+                    : canForceRelease
+                    ? "Release other lock"
+                    : "Claim lock";
 
-                return (
-                  <tr key={company.id}>
-                    <td style={styles.tdStrong}>{company.name}</td>
-                    <td style={styles.tdMono}>{company.organizationNumber}</td>
-                    <td style={styles.td}>{company.group}</td>
-                    <td style={styles.td}>
-                      {company.auditStage ? (
-                        <span
-                          style={{
-                            ...styles.stageChip,
-                            ...getStageChipStyle(company.auditStage),
-                          }}
-                        >
-                          {company.auditStage}
-                        </span>
-                      ) : (
-                        "-"
-                      )}
-                    </td>
-                    <td style={styles.td}>{company.taskCount}</td>
-                    <td style={styles.tdLock}>
-                      <span style={styles.lockStatusSlot}>
-                        {formatLock(company.lock)}
-                      </span>
-                    </td>
-                    <td style={styles.tdActions}>
-                      <div style={styles.actions}>
-                        {(holdsLock || canForceRelease || !company.lock) && (
-                          <button
-                            style={{
-                              ...styles.lockButton,
-                              ...(canForceRelease ? styles.forceReleaseButton : {}),
-                            }}
-                            disabled={
-                              holdsLock || canForceRelease ? busyCompanyId === company.id : disableLockButton
-                            }
-                            onClick={() => updateLock(company.id, lockAction)}
-                          >
-                            {lockLabel}
-                          </button>
+                  return (
+                    <tr key={company.id} style={overdue ? styles.trOverdue : undefined}>
+                      <td style={styles.tdStrong}>{company.name}</td>
+                      <td style={styles.tdMono}>{company.organizationNumber}</td>
+                      <td style={styles.td}>{company.group}</td>
+                      <td style={styles.td}>
+                        {company.auditStage ? (
+                          <span style={{ ...styles.stageChip, ...getStageChipStyle(company.auditStage) }}>
+                            {company.auditStage}
+                          </span>
+                        ) : (
+                          "-"
                         )}
-                        <Link
-                          href={{
-                            pathname: "/audit-tasks",
-                            query: { companyId: company.id, companyName: company.name },
-                          }}
-                          style={styles.openLink}
-                        >
-                          Open audit
-                        </Link>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+                      </td>
+                      <td style={styles.td}>
+                        {canEditDueDate ? (
+                          <input
+                            type="date"
+                            value={company.taskDueDate || ""}
+                            style={styles.dueDateInput}
+                            disabled={busyDueCompanyId === company.id}
+                            onChange={(e) => updateCompanyDueDate(company.id, e.target.value)}
+                          />
+                        ) : (
+                          company.taskDueDate || "-"
+                        )}
+                      </td>
+                      <td style={styles.td}>{company.taskCount}</td>
+                      <td style={styles.tdLock}>
+                        <span style={styles.lockStatusSlot}>{formatLock(company.lock)}</span>
+                      </td>
+                      <td style={styles.tdActions}>
+                        <div style={styles.actions}>
+                          {(holdsLock || canForceRelease || !company.lock) && (
+                            <button
+                              style={{
+                                ...styles.lockButton,
+                                ...(canForceRelease ? styles.forceReleaseButton : {}),
+                              }}
+                              disabled={
+                                holdsLock || canForceRelease
+                                  ? busyCompanyId === company.id
+                                  : busyCompanyId === company.id || !canClaim
+                              }
+                              onClick={() => updateLock(company.id, lockAction)}
+                            >
+                              {lockLabel}
+                            </button>
+                          )}
+                          <Link
+                            href={{
+                              pathname: "/audit-tasks",
+                              query: { companyId: company.id, companyName: company.name },
+                            }}
+                            style={styles.openLink}
+                          >
+                            Open audit
+                          </Link>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -384,6 +470,25 @@ export default function Home() {
 }
 
 const styles = {
+  pageTopRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: "1rem",
+    flexWrap: "wrap",
+  },
+  dashboardLink: {
+    display: "inline-flex",
+    alignItems: "center",
+    border: "1px solid #bfdbfe",
+    background: "#eff6ff",
+    color: "#1d4ed8",
+    textDecoration: "none",
+    fontWeight: 700,
+    fontSize: 13,
+    borderRadius: 10,
+    padding: ".5rem .75rem",
+  },
   sessionRow: {
     marginTop: ".9rem",
     marginBottom: ".75rem",
@@ -457,6 +562,15 @@ const styles = {
     color: "#111827",
     fontWeight: 600,
     boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+  },
+  dueDateInput: {
+    padding: ".4rem .5rem",
+    borderRadius: 8,
+    border: "1px solid #cbd5e1",
+    background: "#fff",
+    color: "#111827",
+    fontSize: 13,
+    width: 150,
   },
   tableWrap: {
     border: "1px solid #e5e7eb",
@@ -539,6 +653,9 @@ const styles = {
     fontSize: 12,
     fontWeight: 700,
     whiteSpace: "nowrap",
+  },
+  trOverdue: {
+    background: "#fff7ed",
   },
   actions: {
     display: "flex",
