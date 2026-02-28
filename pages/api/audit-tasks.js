@@ -1,9 +1,11 @@
 import {
   advanceCompanyStage,
   claimCompanyLock,
+  forceReleaseCompanyLock,
   getAuditData,
   releaseCompanyLock,
   renewCompanyLock,
+  sendCompanyToSigning,
   updateTask,
 } from "../../lib/auditTasksStore";
 
@@ -75,7 +77,7 @@ export default async function handler(req, res) {
   }
 
   if (req.method === "POST") {
-    const { companyId, actorId, actorName, action } = req.body || {};
+    const { companyId, actorId, actorName, actorRole, action } = req.body || {};
 
     if (!companyId || typeof companyId !== "string") {
       res.status(400).json({ error: "Missing or invalid companyId." });
@@ -101,8 +103,12 @@ export default async function handler(req, res) {
       result = await renewCompanyLock(companyId, actorId);
     } else if (action === "release") {
       result = await releaseCompanyLock(companyId, actorId);
+    } else if (action === "force_release") {
+      result = await forceReleaseCompanyLock(companyId, actorRole);
     } else if (action === "advance_stage") {
       result = await advanceCompanyStage(companyId, actorId);
+    } else if (action === "send_to_signing") {
+      result = await sendCompanyToSigning(companyId, actorId, actorRole);
     } else {
       res.status(400).json({ error: "Invalid action." });
       return;

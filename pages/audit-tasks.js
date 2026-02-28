@@ -28,6 +28,11 @@ function getStageChipStyle(stage) {
       border: "#ddd6fe",
       color: "#6d28d9",
     },
+    Signing: {
+      background: "#ecfdf5",
+      border: "#bbf7d0",
+      color: "#166534",
+    },
   };
   return palette[stage] || {
     background: "#f3f4f6",
@@ -84,12 +89,15 @@ export default function AuditTasks() {
   const [lockBusy, setLockBusy] = useState(false);
   const [actorId, setActorId] = useState("");
   const [actorName, setActorName] = useState("");
+  const [actorRole, setActorRole] = useState("auditor");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [savingById, setSavingById] = useState({});
   const [stageBusy, setStageBusy] = useState(false);
   const [stageJustAdvanced, setStageJustAdvanced] = useState(false);
   const [stagePressed, setStagePressed] = useState(false);
+  const [signingBusy, setSigningBusy] = useState(false);
+  const [signingPressed, setSigningPressed] = useState(false);
   const [taskQuery, setTaskQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
@@ -175,6 +183,7 @@ export default function AuditTasks() {
     }
     const existingActorId = window.localStorage.getItem("auditActorId");
     const existingActorName = window.localStorage.getItem("auditActorName");
+    const existingActorRole = window.localStorage.getItem("auditEmployeeType");
     const nextActorId =
       existingActorId ||
       (window.crypto?.randomUUID ? window.crypto.randomUUID() : `actor-${Date.now()}`);
@@ -184,6 +193,9 @@ export default function AuditTasks() {
     setActorId(nextActorId);
     if (existingActorName) {
       setActorName(existingActorName);
+    }
+    if (existingActorRole) {
+      setActorRole(existingActorRole);
     }
   }, []);
 
@@ -321,6 +333,7 @@ export default function AuditTasks() {
           companyId: selectedCompanyId,
           actorId,
           actorName,
+          actorRole,
         }),
       });
       const data = await response.json();
@@ -380,6 +393,48 @@ export default function AuditTasks() {
     }
   }
 
+  async function sendToSigning() {
+    if (!selectedCompanyId || !actorId) {
+      return;
+    }
+    setSigningBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/audit-tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "send_to_signing",
+          companyId: selectedCompanyId,
+          actorId,
+          actorRole,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        if (data.lock !== undefined) {
+          setLock(data.lock);
+        }
+        throw new Error(data.error || "Could not send company to signing.");
+      }
+      if (data.lock !== undefined) {
+        setLock(data.lock);
+      }
+      if (data.company) {
+        setCompanies((prev) =>
+          prev.map((company) =>
+            company.id === data.company.id ? { ...company, ...data.company } : company
+          )
+        );
+      }
+    } catch (sendError) {
+      setError(sendError.message || "Could not send company to signing.");
+    } finally {
+      setSigningBusy(false);
+      setSigningPressed(false);
+    }
+  }
+
   return (
     <>
       <Head>
@@ -407,21 +462,39 @@ export default function AuditTasks() {
         <section style={styles.companyInfoCard}>
           <div style={styles.companyInfoHeader}>
             <h2 style={styles.companyInfoTitle}>Company Information</h2>
-            <button
-              style={{
-                ...styles.nextStageButton,
-                ...(stagePressed ? styles.nextStageButtonPressed : {}),
-                ...(stageBusy ? styles.nextStageButtonBusy : {}),
-                ...(stageJustAdvanced ? styles.nextStageButtonDone : {}),
-              }}
-              disabled={!holdsLock || stageBusy}
-              onClick={advanceStage}
-              onMouseDown={() => setStagePressed(true)}
-              onMouseUp={() => setStagePressed(false)}
-              onMouseLeave={() => setStagePressed(false)}
-            >
-              {stageBusy ? "Sending to next stage..." : "Send to next stage"}
-            </button>
+            <div style={styles.stageButtons}>
+              <button
+                style={{
+                  ...styles.nextStageButton,
+                  ...(stagePressed ? styles.nextStageButtonPressed : {}),
+                  ...(stageBusy ? styles.nextStageButtonBusy : {}),
+                  ...(stageJustAdvanced ? styles.nextStageButtonDone : {}),
+                }}
+                disabled={!holdsLock || stageBusy}
+                onClick={advanceStage}
+                onMouseDown={() => setStagePressed(true)}
+                onMouseUp={() => setStagePressed(false)}
+                onMouseLeave={() => setStagePressed(false)}
+              >
+                {stageBusy ? "Sending to next stage..." : "Send to next stage"}
+              </button>
+              {actorRole === "partner" && (
+                <button
+                  style={{
+                    ...styles.signingButton,
+                    ...(signingPressed ? styles.signingButtonPressed : {}),
+                    ...(signingBusy ? styles.signingButtonBusy : {}),
+                  }}
+                  disabled={!holdsLock || signingBusy}
+                  onClick={sendToSigning}
+                  onMouseDown={() => setSigningPressed(true)}
+                  onMouseUp={() => setSigningPressed(false)}
+                  onMouseLeave={() => setSigningPressed(false)}
+                >
+                  {signingBusy ? "Sending to signing..." : "Send to signing"}
+                </button>
+              )}
+            </div>
           </div>
           <div style={styles.companyInfoGrid}>
             <div style={styles.infoItem}>
@@ -495,17 +568,50 @@ export default function AuditTasks() {
               value={actorName}
               onChange={(e) => setActorName(e.target.value)}
             />
-            <button
-              style={styles.lockButton}
-              onClick={() => updateLock(holdsLock ? "release" : "claim")}
-              disabled={
-                lockBusy ||
-                !selectedCompanyId ||
-                (holdsLock ? false : actorName.trim().length < 2)
+            {(() => {
+              const lockedByOther = Boolean(lock && lock.actorId !== actorId);
+              const canForceRelease =
+                lockedByOther &&
+                (actorRole === "manager" || actorRole === "partner");
+
+              if (holdsLock) {
+                return (
+                  <button
+                    style={styles.lockButton}
+                    onClick={() => updateLock("release")}
+                    disabled={lockBusy || !selectedCompanyId}
+                  >
+                    Release lock
+                  </button>
+                );
               }
-            >
-              {holdsLock ? "Release lock" : "Claim lock"}
-            </button>
+
+              if (canForceRelease) {
+                return (
+                  <button
+                    style={{ ...styles.lockButton, ...styles.forceReleaseButton }}
+                    onClick={() => updateLock("force_release")}
+                    disabled={lockBusy || !selectedCompanyId}
+                  >
+                    Release other lock
+                  </button>
+                );
+              }
+
+              if (!lock) {
+                return (
+                  <button
+                    style={styles.lockButton}
+                    onClick={() => updateLock("claim")}
+                    disabled={lockBusy || !selectedCompanyId || actorName.trim().length < 2}
+                  >
+                    Claim lock
+                  </button>
+                );
+              }
+
+              return null;
+            })()}
             <span style={styles.lockText}>
               {holdsLock
                 ? `Locked by you until ${new Date(lock.expiresAt).toLocaleTimeString()}`
@@ -637,6 +743,12 @@ const styles = {
     flexWrap: "wrap",
     marginBottom: ".75rem",
   },
+  stageButtons: {
+    display: "flex",
+    alignItems: "center",
+    gap: ".5rem",
+    flexWrap: "wrap",
+  },
   companyInfoGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
@@ -705,6 +817,31 @@ const styles = {
     background: "#f0fdf4",
     color: "#166534",
     boxShadow: "0 1px 2px rgba(22, 101, 52, 0.12)",
+  },
+  signingButton: {
+    padding: ".52rem .86rem",
+    borderRadius: 10,
+    border: "1px solid #86efac",
+    background: "#f0fdf4",
+    color: "#166534",
+    fontWeight: 600,
+    cursor: "pointer",
+    fontSize: 13,
+    boxShadow: "0 1px 2px rgba(22, 101, 52, 0.1)",
+    transition: "all 120ms ease",
+  },
+  signingButtonPressed: {
+    transform: "translateY(1px)",
+    background: "#dcfce7",
+    borderColor: "#4ade80",
+    boxShadow: "0 0 0 rgba(0,0,0,0)",
+  },
+  signingButtonBusy: {
+    opacity: 0.82,
+    background: "#e5e7eb",
+    color: "#374151",
+    borderColor: "#d1d5db",
+    cursor: "progress",
   },
   toolbar: {
     display: "flex",
@@ -903,6 +1040,11 @@ const styles = {
     fontSize: 13,
     fontWeight: 600,
     cursor: "pointer",
+  },
+  forceReleaseButton: {
+    borderColor: "#f59e0b",
+    background: "#fffbeb",
+    color: "#92400e",
   },
   lockText: {
     fontSize: 13,

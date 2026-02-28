@@ -8,6 +8,7 @@ const AUDIT_STAGES = [
   "First time review",
   "Second time review",
   "Partner review",
+  "Signing",
 ];
 
 function getStageChipStyle(stage) {
@@ -31,6 +32,11 @@ function getStageChipStyle(stage) {
       background: "#f5f3ff",
       border: "#ddd6fe",
       color: "#6d28d9",
+    },
+    Signing: {
+      background: "#ecfdf5",
+      border: "#bbf7d0",
+      color: "#166534",
     },
   };
   return palette[stage] || {
@@ -56,6 +62,7 @@ export default function Home() {
   const [error, setError] = useState("");
   const [actorId, setActorId] = useState("");
   const [actorName, setActorName] = useState("");
+  const [employeeType, setEmployeeType] = useState("auditor");
   const [busyCompanyId, setBusyCompanyId] = useState("");
 
   async function loadCompanies(options = {}) {
@@ -86,6 +93,7 @@ export default function Home() {
     }
     const existingActorId = window.localStorage.getItem("auditActorId");
     const existingActorName = window.localStorage.getItem("auditActorName");
+    const existingEmployeeType = window.localStorage.getItem("auditEmployeeType");
     const nextActorId =
       existingActorId ||
       (window.crypto?.randomUUID ? window.crypto.randomUUID() : `actor-${Date.now()}`);
@@ -96,15 +104,28 @@ export default function Home() {
     if (existingActorName) {
       setActorName(existingActorName);
     }
+    if (existingEmployeeType) {
+      setEmployeeType(existingEmployeeType);
+    }
     loadCompanies();
   }, []);
 
   useEffect(() => {
-    if (!actorName || typeof window === "undefined") {
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (!actorName) {
       return;
     }
     window.localStorage.setItem("auditActorName", actorName);
   }, [actorName]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem("auditEmployeeType", employeeType);
+  }, [employeeType]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -131,6 +152,7 @@ export default function Home() {
           companyId,
           actorId,
           actorName,
+          actorRole: employeeType,
         }),
       });
       const data = await response.json();
@@ -192,6 +214,18 @@ export default function Home() {
             value={actorName}
             onChange={(e) => setActorName(e.target.value)}
           />
+          <div style={styles.employeeTypeField}>
+            <span style={styles.sessionLabel}>Employee type</span>
+            <select
+              style={styles.employeeTypeSelect}
+              value={employeeType}
+              onChange={(e) => setEmployeeType(e.target.value)}
+            >
+              <option value="auditor">Auditor</option>
+              <option value="manager">Manager</option>
+              <option value="partner">Partner</option>
+            </select>
+          </div>
         </div>
 
         <div style={styles.headerRow}>
@@ -270,7 +304,21 @@ export default function Home() {
               ) : filteredCompanies.map((company) => {
                 const holdsLock = Boolean(company.lock && company.lock.actorId === actorId);
                 const lockedByOther = Boolean(company.lock && company.lock.actorId !== actorId);
-                const canClaim = actorName.trim().length >= 2 && !lockedByOther;
+                const canClaim = actorName.trim().length >= 2 && !company.lock;
+                const canForceRelease =
+                  lockedByOther &&
+                  (employeeType === "manager" || employeeType === "partner");
+                const lockAction = holdsLock
+                  ? "release"
+                  : canForceRelease
+                  ? "force_release"
+                  : "claim";
+                const lockLabel = holdsLock
+                  ? "Release lock"
+                  : canForceRelease
+                  ? "Release other lock"
+                  : "Claim lock";
+                const disableLockButton = busyCompanyId === company.id || !canClaim;
 
                 return (
                   <tr key={company.id}>
@@ -299,18 +347,20 @@ export default function Home() {
                     </td>
                     <td style={styles.tdActions}>
                       <div style={styles.actions}>
-                        <button
-                          style={styles.lockButton}
-                          disabled={
-                            busyCompanyId === company.id ||
-                            (holdsLock ? false : !canClaim)
-                          }
-                          onClick={() =>
-                            updateLock(company.id, holdsLock ? "release" : "claim")
-                          }
-                        >
-                          {holdsLock ? "Release lock" : "Claim lock"}
-                        </button>
+                        {(holdsLock || canForceRelease || !company.lock) && (
+                          <button
+                            style={{
+                              ...styles.lockButton,
+                              ...(canForceRelease ? styles.forceReleaseButton : {}),
+                            }}
+                            disabled={
+                              holdsLock || canForceRelease ? busyCompanyId === company.id : disableLockButton
+                            }
+                            onClick={() => updateLock(company.id, lockAction)}
+                          >
+                            {lockLabel}
+                          </button>
+                        )}
                         <Link
                           href={{
                             pathname: "/audit-tasks",
@@ -341,6 +391,21 @@ const styles = {
     alignItems: "center",
     gap: ".65rem",
     flexWrap: "wrap",
+  },
+  employeeTypeField: {
+    display: "flex",
+    flexDirection: "column",
+    gap: ".32rem",
+  },
+  employeeTypeSelect: {
+    padding: ".56rem .75rem",
+    borderRadius: 10,
+    border: "1px solid #cbd5e1",
+    minWidth: 180,
+    outline: "none",
+    background: "#fff",
+    color: "#111827",
+    fontWeight: 600,
   },
   sessionLabel: {
     fontSize: 12,
@@ -491,6 +556,11 @@ const styles = {
     fontWeight: 600,
     fontSize: 13,
     minWidth: 98,
+  },
+  forceReleaseButton: {
+    borderColor: "#f59e0b",
+    background: "#fffbeb",
+    color: "#92400e",
   },
   openLink: {
     padding: ".45rem .75rem",
