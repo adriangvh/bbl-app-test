@@ -3,6 +3,42 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 const COMPANIES_POLL_MS = 5000;
+const AUDIT_STAGES = [
+  "First time auditing",
+  "First time review",
+  "Second time review",
+  "Partner review",
+];
+
+function getStageChipStyle(stage) {
+  const palette = {
+    "First time auditing": {
+      background: "#eff6ff",
+      border: "#bfdbfe",
+      color: "#1d4ed8",
+    },
+    "First time review": {
+      background: "#fffbeb",
+      border: "#fde68a",
+      color: "#92400e",
+    },
+    "Second time review": {
+      background: "#ecfeff",
+      border: "#a5f3fc",
+      color: "#0f766e",
+    },
+    "Partner review": {
+      background: "#f5f3ff",
+      border: "#ddd6fe",
+      color: "#6d28d9",
+    },
+  };
+  return palette[stage] || {
+    background: "#f3f4f6",
+    border: "#d1d5db",
+    color: "#374151",
+  };
+}
 
 function formatLock(lock) {
   if (!lock) {
@@ -113,8 +149,8 @@ export default function Home() {
   }
 
   const groupOptions = Array.from(new Set(companies.map((company) => company.group))).sort();
-  const stageOptions = Array.from(
-    new Set(companies.map((company) => company.auditStage).filter(Boolean))
+  const stageOptions = AUDIT_STAGES.filter((stage) =>
+    companies.some((company) => company.auditStage === stage)
   );
   const filteredCompanies = companies.filter((company) =>
     (groupFilter === "all" ? true : company.group === groupFilter) &&
@@ -205,7 +241,20 @@ export default function Home() {
                     <td style={styles.tdStrong}>{company.name}</td>
                     <td style={styles.tdMono}>{company.organizationNumber}</td>
                     <td style={styles.td}>{company.group}</td>
-                    <td style={styles.td}>{company.auditStage || "-"}</td>
+                    <td style={styles.td}>
+                      {company.auditStage ? (
+                        <span
+                          style={{
+                            ...styles.stageChip,
+                            ...getStageChipStyle(company.auditStage),
+                          }}
+                        >
+                          {company.auditStage}
+                        </span>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
                     <td style={styles.td}>{company.taskCount}</td>
                     <td style={styles.tdLock}>
                       <span style={styles.lockStatusSlot}>
@@ -343,6 +392,16 @@ const styles = {
     color: "#111827",
     verticalAlign: "top",
     minWidth: 230,
+  },
+  stageChip: {
+    display: "inline-flex",
+    alignItems: "center",
+    borderRadius: 999,
+    border: "1px solid",
+    padding: ".22rem .58rem",
+    fontSize: 12,
+    fontWeight: 700,
+    whiteSpace: "nowrap",
   },
   actions: {
     display: "flex",

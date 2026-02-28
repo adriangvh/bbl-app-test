@@ -6,6 +6,36 @@ import { useRouter } from "next/router";
 
 const TASKS_POLL_MS = 5000;
 
+function getStageChipStyle(stage) {
+  const palette = {
+    "First time auditing": {
+      background: "#eff6ff",
+      border: "#bfdbfe",
+      color: "#1d4ed8",
+    },
+    "First time review": {
+      background: "#fffbeb",
+      border: "#fde68a",
+      color: "#92400e",
+    },
+    "Second time review": {
+      background: "#ecfeff",
+      border: "#a5f3fc",
+      color: "#0f766e",
+    },
+    "Partner review": {
+      background: "#f5f3ff",
+      border: "#ddd6fe",
+      color: "#6d28d9",
+    },
+  };
+  return palette[stage] || {
+    background: "#f3f4f6",
+    border: "#d1d5db",
+    color: "#374151",
+  };
+}
+
 function getTodayIso() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -58,12 +88,39 @@ export default function AuditTasks() {
   const [error, setError] = useState("");
   const [savingById, setSavingById] = useState({});
   const [stageBusy, setStageBusy] = useState(false);
+  const [stageJustAdvanced, setStageJustAdvanced] = useState(false);
+  const [stagePressed, setStagePressed] = useState(false);
+  const [taskQuery, setTaskQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   const holdsLock = Boolean(lock && actorId && lock.actorId === actorId);
   const canEdit = holdsLock;
   const selectedCompany = companies.find((company) => company.id === selectedCompanyId);
   const routeCompanyName =
     typeof router.query.companyName === "string" ? router.query.companyName : "";
+  const normalizedQuery = taskQuery.trim().toLowerCase();
+  const filteredRows = rows.filter((row) => {
+    const rowStatus = String(row.status || "").toLowerCase();
+    const matchesStatus =
+      statusFilter === "all" ? true : rowStatus === statusFilter;
+    if (!matchesStatus) {
+      return false;
+    }
+    if (!normalizedQuery) {
+      return true;
+    }
+    const searchBlob = [
+      row.taskNumber,
+      row.task,
+      row.description,
+      row.comment,
+      row.evidence,
+      row.status,
+    ]
+      .join(" ")
+      .toLowerCase();
+    return searchBlob.includes(normalizedQuery);
+  });
 
   function updateRowLocal(id, key, value) {
     setRows((prevRows) =>
@@ -167,6 +224,16 @@ export default function AuditTasks() {
     }, TASKS_POLL_MS);
     return () => clearInterval(timer);
   }, [selectedCompanyId]);
+
+  useEffect(() => {
+    if (!stageJustAdvanced) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      setStageJustAdvanced(false);
+    }, 1700);
+    return () => clearTimeout(timer);
+  }, [stageJustAdvanced]);
 
   async function persistPatch(id, patch, fallbackRow, companyId) {
     if (!companyId || !actorId) {
@@ -304,10 +371,12 @@ export default function AuditTasks() {
           )
         );
       }
+      setStageJustAdvanced(true);
     } catch (stageError) {
       setError(stageError.message || "Could not move company to next stage.");
     } finally {
       setStageBusy(false);
+      setStagePressed(false);
     }
   }
 
@@ -339,11 +408,23 @@ export default function AuditTasks() {
           <div style={styles.companyInfoHeader}>
             <h2 style={styles.companyInfoTitle}>Company Information</h2>
             <button
-              style={styles.nextStageButton}
+              style={{
+                ...styles.nextStageButton,
+                ...(stagePressed ? styles.nextStageButtonPressed : {}),
+                ...(stageBusy ? styles.nextStageButtonBusy : {}),
+                ...(stageJustAdvanced ? styles.nextStageButtonDone : {}),
+              }}
               disabled={!holdsLock || stageBusy}
               onClick={advanceStage}
+              onMouseDown={() => setStagePressed(true)}
+              onMouseUp={() => setStagePressed(false)}
+              onMouseLeave={() => setStagePressed(false)}
             >
-              Send to next stage
+              {stageBusy
+                ? "Sending to next stage..."
+                : stageJustAdvanced
+                ? "Moved to next stage"
+                : "Send to next stage"}
             </button>
           </div>
           <div style={styles.companyInfoGrid}>
@@ -371,7 +452,20 @@ export default function AuditTasks() {
             </div>
             <div style={styles.infoItem}>
               <span style={styles.infoLabel}>audit_stage</span>
-              <span style={styles.infoValue}>{selectedCompany?.auditStage || "-"}</span>
+              <span style={styles.infoValue}>
+                {selectedCompany?.auditStage ? (
+                  <span
+                    style={{
+                      ...styles.stageChip,
+                      ...getStageChipStyle(selectedCompany.auditStage),
+                    }}
+                  >
+                    {selectedCompany.auditStage}
+                  </span>
+                ) : (
+                  "-"
+                )}
+              </span>
             </div>
           </div>
         </section>
@@ -382,13 +476,18 @@ export default function AuditTasks() {
               <input
                 placeholder="Search tasks…"
                 style={styles.input}
-                onChange={() => {}}
+                value={taskQuery}
+                onChange={(e) => setTaskQuery(e.target.value)}
               />
-              <select style={styles.select} defaultValue="all">
+              <select
+                style={styles.select}
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
                 <option value="all">All statuses</option>
                 <option value="completed">Completed</option>
-                <option value="needs-review">Needs review</option>
-                <option value="in-progress">In progress</option>
+                <option value="needs review">Needs review</option>
+                <option value="in progress">In progress</option>
                 <option value="blocked">Blocked</option>
               </select>
             </div>
@@ -442,13 +541,13 @@ export default function AuditTasks() {
                       Loading tasks...
                     </td>
                   </tr>
-                ) : rows.length === 0 ? (
+                ) : filteredRows.length === 0 ? (
                   <tr style={styles.tr}>
                     <td style={styles.td} colSpan={8}>
-                      No tasks found.
+                      No tasks match your filters.
                     </td>
                   </tr>
-                ) : rows.map((r) => (
+                ) : filteredRows.map((r) => (
                   <tr key={r.id} style={styles.tr}>
                     <td style={styles.tdMono}>{r.taskNumber || "-"}</td>
                     <td style={styles.tdStrong}>{r.task}</td>
@@ -566,16 +665,44 @@ const styles = {
     fontSize: 14,
     fontWeight: 600,
     color: "#111827",
+    minHeight: 22,
+    display: "inline-flex",
+    alignItems: "center",
+  },
+  stageChip: {
+    display: "inline-flex",
+    alignItems: "center",
+    borderRadius: 999,
+    border: "1px solid",
+    padding: ".2rem .56rem",
+    fontSize: 12,
+    fontWeight: 700,
+    whiteSpace: "nowrap",
   },
   nextStageButton: {
-    padding: ".45rem .75rem",
-    borderRadius: 10,
-    border: "1px solid #111827",
-    background: "#111827",
+    padding: ".56rem .9rem",
+    borderRadius: 11,
+    border: "1px solid #1d4ed8",
+    background: "linear-gradient(180deg, #2563eb, #1d4ed8)",
     color: "#fff",
-    fontWeight: 600,
+    fontWeight: 700,
     cursor: "pointer",
     fontSize: 13,
+    boxShadow: "0 8px 18px rgba(37, 99, 235, 0.25)",
+    transition: "all 120ms ease",
+  },
+  nextStageButtonPressed: {
+    transform: "translateY(1px) scale(0.995)",
+    boxShadow: "0 3px 10px rgba(29, 78, 216, 0.2)",
+  },
+  nextStageButtonBusy: {
+    opacity: 0.88,
+    cursor: "progress",
+  },
+  nextStageButtonDone: {
+    borderColor: "#047857",
+    background: "linear-gradient(180deg, #10b981, #059669)",
+    boxShadow: "0 8px 18px rgba(16, 185, 129, 0.26)",
   },
   toolbar: {
     display: "flex",
