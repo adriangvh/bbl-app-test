@@ -3,11 +3,18 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import AuditTasksTab from "../components/audit/AuditTasksTab";
+import CompanyLockBar from "../components/audit/CompanyLockBar";
 import CompanyInfoCard from "../components/audit/CompanyInfoCard";
 import RiskResponsibilityTab from "../components/audit/RiskResponsibilityTab";
 import { styles } from "../components/audit/auditTasksStyles";
 
 const TASKS_POLL_MS = 5000;
+const DEFAULT_RISK_RESPONSES = {
+  overall_risk_assessed: "",
+  fraud_risk_documented: "",
+  controls_tested: "",
+  partner_review_ready: "",
+};
 
 function getTodayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -34,6 +41,7 @@ export default function AuditTasks() {
   const [taskQuery, setTaskQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [activeTab, setActiveTab] = useState("audit_tasks");
+  const [riskResponses, setRiskResponses] = useState(DEFAULT_RISK_RESPONSES);
 
   const holdsLock = Boolean(lock && actorId && lock.actorId === actorId);
   const canEdit = holdsLock;
@@ -200,6 +208,36 @@ export default function AuditTasks() {
     }, 1700);
     return () => clearTimeout(timer);
   }, [stageJustAdvanced]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !selectedCompanyId) {
+      return;
+    }
+    const raw = window.localStorage.getItem(`riskResponses:${selectedCompanyId}`);
+    if (!raw) {
+      setRiskResponses(DEFAULT_RISK_RESPONSES);
+      return;
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      setRiskResponses({ ...DEFAULT_RISK_RESPONSES, ...parsed });
+    } catch {
+      setRiskResponses(DEFAULT_RISK_RESPONSES);
+    }
+  }, [selectedCompanyId]);
+
+  function updateRiskResponse(key, value) {
+    if (!holdsLock || !selectedCompanyId) {
+      return;
+    }
+    setRiskResponses((prev) => {
+      const next = { ...prev, [key]: value };
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(`riskResponses:${selectedCompanyId}`, JSON.stringify(next));
+      }
+      return next;
+    });
+  }
 
   async function persistPatch(id, patch, fallbackRow, companyId) {
     if (!companyId || !actorId) {
@@ -443,6 +481,19 @@ export default function AuditTasks() {
           onSigningMouseLeave={() => setSigningPressed(false)}
         />
 
+        <CompanyLockBar
+          styles={styles}
+          actorName={actorName}
+          onActorNameChange={(e) => setActorName(e.target.value)}
+          actorId={actorId}
+          actorRole={actorRole}
+          lock={lock}
+          holdsLock={holdsLock}
+          lockBusy={lockBusy}
+          selectedCompanyId={selectedCompanyId}
+          onUpdateLock={updateLock}
+        />
+
         <div style={styles.tabsRow}>
           <button
             type="button"
@@ -473,15 +524,6 @@ export default function AuditTasks() {
             statusFilter={statusFilter}
             onTaskQueryChange={(e) => setTaskQuery(e.target.value)}
             onStatusFilterChange={(e) => setStatusFilter(e.target.value)}
-            actorName={actorName}
-            onActorNameChange={(e) => setActorName(e.target.value)}
-            actorId={actorId}
-            actorRole={actorRole}
-            lock={lock}
-            holdsLock={holdsLock}
-            lockBusy={lockBusy}
-            selectedCompanyId={selectedCompanyId}
-            onUpdateLock={updateLock}
             error={error}
             loading={loading}
             filteredRows={filteredRows}
@@ -493,7 +535,13 @@ export default function AuditTasks() {
             savingById={savingById}
           />
         ) : (
-          <RiskResponsibilityTab styles={styles} selectedCompany={selectedCompany} />
+          <RiskResponsibilityTab
+            styles={styles}
+            selectedCompany={selectedCompany}
+            responses={riskResponses}
+            onResponseChange={updateRiskResponse}
+            canEdit={holdsLock}
+          />
         )}
       </main>
     </>
