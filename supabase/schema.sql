@@ -106,6 +106,19 @@ create table if not exists public.audit_notifications (
 create index if not exists audit_notifications_company_recipient_idx
 on public.audit_notifications(company_id, recipient_name_key, is_read, created_at desc);
 
+create table if not exists public.audit_users (
+  actor_id text primary key,
+  display_name text not null,
+  name_key text not null unique,
+  role text not null default 'auditor',
+  last_seen_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists audit_users_name_key_idx
+on public.audit_users(name_key);
+
 create or replace function public.set_updated_at_audit_locks()
 returns trigger
 language plpgsql
@@ -121,3 +134,19 @@ create trigger trg_set_updated_at_audit_locks
 before update on public.audit_locks
 for each row
 execute function public.set_updated_at_audit_locks();
+
+create or replace function public.set_updated_at_audit_users()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_set_updated_at_audit_users on public.audit_users;
+create trigger trg_set_updated_at_audit_users
+before update on public.audit_users
+for each row
+execute function public.set_updated_at_audit_users();

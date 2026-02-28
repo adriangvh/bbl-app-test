@@ -1,7 +1,7 @@
 import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AuditTasksTab from "../components/audit/AuditTasksTab";
 import ActivityTimeline from "../components/audit/ActivityTimeline";
 import CompanyLockBar from "../components/audit/CompanyLockBar";
@@ -23,6 +23,7 @@ export default function AuditTasks() {
   const [activity, setActivity] = useState([]);
   const [discussions, setDiscussions] = useState([]);
   const [discussionBusyByTask, setDiscussionBusyByTask] = useState({});
+  const [mentionUsers, setMentionUsers] = useState([]);
   const [presence, setPresence] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
@@ -112,26 +113,37 @@ export default function AuditTasks() {
       .toLowerCase();
     return searchBlob.includes(normalizedQuery);
   });
-  const mentionCandidates = Array.from(
-    new Set(
-      [
-        actorName,
-        ...presence.map((person) => person.actorName),
-        ...activity.map((event) => event.actorName),
-        ...discussions.map((discussion) => discussion.authorName),
-      ]
-        .map((name) => String(name || "").trim())
-        .filter(Boolean)
-    )
-  )
-    .map((name) => {
-      const handle = name
-        .toLowerCase()
-        .replace(/\s+/g, ".")
-        .replace(/[^a-z0-9._-]/g, "");
-      return { label: name, handle };
-    })
-    .filter((candidate) => candidate.handle.length > 0);
+  const mentionCandidates = useMemo(() => {
+    const map = new Map();
+    (mentionUsers || []).forEach((user) => {
+      const handle = String(user.handle || "").trim().toLowerCase();
+      const label = String(user.label || "").trim();
+      if (!handle || !label) {
+        return;
+      }
+      if (!map.has(handle)) {
+        map.set(handle, { label, handle });
+      }
+    });
+
+    [actorName, ...presence.map((person) => person.actorName), ...activity.map((event) => event.actorName), ...discussions.map((discussion) => discussion.authorName)]
+      .map((name) => String(name || "").trim())
+      .filter(Boolean)
+      .forEach((name) => {
+        const handle = name
+          .toLowerCase()
+          .replace(/\s+/g, ".")
+          .replace(/[^a-z0-9._-]/g, "");
+        if (!handle) {
+          return;
+        }
+        if (!map.has(handle)) {
+          map.set(handle, { label: name, handle });
+        }
+      });
+
+    return Array.from(map.values()).sort((a, b) => a.handle.localeCompare(b.handle));
+  }, [mentionUsers, actorName, presence, activity, discussions]);
 
   function updateRowLocal(id, key, value) {
     setRows((prevRows) =>
@@ -175,6 +187,7 @@ export default function AuditTasks() {
       }
       setActivity(data.activity || []);
       setDiscussions(data.discussions || []);
+      setMentionUsers(data.mentionUsers || []);
       setPresence(data.presence || []);
       setLock(data.lock || null);
     } catch (loadError) {

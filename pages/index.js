@@ -185,10 +185,12 @@ export default function Home() {
         return;
       }
       loadCompanies({ silent: true });
-      loadNotifications();
+      if (actorName.trim()) {
+        loadNotifications();
+      }
     }, COMPANIES_POLL_MS);
     return () => clearInterval(timer);
-  }, []);
+  }, [actorName]);
 
   async function markNotificationRead(notificationId) {
     if (!actorName.trim()) {
