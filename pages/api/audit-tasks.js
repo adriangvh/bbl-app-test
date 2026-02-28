@@ -1,8 +1,10 @@
 import {
+  addTaskDiscussionComment,
   advanceCompanyStage,
   claimCompanyLock,
   forceReleaseCompanyLock,
   getAuditData,
+  markNotificationRead,
   releaseCompanyLock,
   renewCompanyLock,
   removePresence,
@@ -23,7 +25,9 @@ export default async function handler(req, res) {
   if (req.method === "GET") {
     const companyId =
       typeof req.query.companyId === "string" ? req.query.companyId : undefined;
-    const data = await getAuditData(companyId);
+    const viewerName =
+      typeof req.query.viewerName === "string" ? req.query.viewerName : undefined;
+    const data = await getAuditData(companyId, viewerName);
     res.status(200).json(data);
     return;
   }
@@ -134,6 +138,37 @@ export default async function handler(req, res) {
       );
     } else if (action === "presence_leave") {
       result = await removePresence(companyId, actorId);
+    } else if (action === "add_task_discussion") {
+      const { taskId, message } = req.body || {};
+      if (!taskId || typeof taskId !== "string") {
+        res.status(400).json({ error: "Missing or invalid taskId." });
+        return;
+      }
+      if (typeof message !== "string") {
+        res.status(400).json({ error: "Missing or invalid message." });
+        return;
+      }
+      result = await addTaskDiscussionComment(
+        companyId,
+        taskId,
+        actorId,
+        typeof actorName === "string" ? actorName : "",
+        message
+      );
+    } else if (action === "mark_notification_read") {
+      const { notificationId } = req.body || {};
+      if (
+        (typeof notificationId !== "string" && typeof notificationId !== "number") ||
+        String(notificationId).trim() === ""
+      ) {
+        res.status(400).json({ error: "Missing or invalid notificationId." });
+        return;
+      }
+      result = await markNotificationRead(
+        companyId,
+        String(notificationId),
+        typeof actorName === "string" ? actorName : ""
+      );
     } else {
       res.status(400).json({ error: "Invalid action." });
       return;
@@ -148,6 +183,8 @@ export default async function handler(req, res) {
       lock: result.lock || null,
       company: result.company || null,
       presence: result.presence || null,
+      comment: result.comment || null,
+      notification: result.notification || null,
     });
     return;
   }

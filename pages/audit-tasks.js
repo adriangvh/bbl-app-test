@@ -6,6 +6,7 @@ import AuditTasksTab from "../components/audit/AuditTasksTab";
 import ActivityTimeline from "../components/audit/ActivityTimeline";
 import CompanyLockBar from "../components/audit/CompanyLockBar";
 import CompanyInfoCard from "../components/audit/CompanyInfoCard";
+import NotificationsPanel from "../components/audit/NotificationsPanel";
 import PresencePanel from "../components/audit/PresencePanel";
 import RiskResponsibilityTab from "../components/audit/RiskResponsibilityTab";
 import { styles } from "../components/audit/auditTasksStyles";
@@ -21,6 +22,10 @@ export default function AuditTasks() {
   const router = useRouter();
   const [rows, setRows] = useState([]);
   const [activity, setActivity] = useState([]);
+  const [discussions, setDiscussions] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [discussionBusyByTask, setDiscussionBusyByTask] = useState({});
+  const [notificationBusyById, setNotificationBusyById] = useState({});
   const [presence, setPresence] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
@@ -132,6 +137,9 @@ export default function AuditTasks() {
       if (companyId) {
         params.set("companyId", companyId);
       }
+      if (actorName.trim()) {
+        params.set("viewerName", actorName.trim());
+      }
       const query = params.toString();
       const response = await fetch(`/api/audit-tasks${query ? `?${query}` : ""}`);
       if (!response.ok) {
@@ -149,6 +157,8 @@ export default function AuditTasks() {
         setRows(data.tasks || []);
       }
       setActivity(data.activity || []);
+      setDiscussions(data.discussions || []);
+      setNotifications((data.notifications || []).filter((n) => !n.isRead));
       setPresence(data.presence || []);
       setLock(data.lock || null);
     } catch (loadError) {
@@ -224,6 +234,13 @@ export default function AuditTasks() {
 
     return () => clearInterval(timer);
   }, [selectedCompanyId]);
+
+  useEffect(() => {
+    if (!selectedCompanyId || !actorName.trim()) {
+      return;
+    }
+    loadRows(selectedCompanyId, { silent: true });
+  }, [actorName]);
 
   useEffect(() => {
     if (!stageJustAdvanced) {
@@ -537,6 +554,75 @@ export default function AuditTasks() {
     }
   }
 
+  async function addTaskDiscussion(taskId, message) {
+    if (!selectedCompanyId || !actorId) {
+      return false;
+    }
+    setDiscussionBusyByTask((prev) => ({ ...prev, [taskId]: true }));
+    setError("");
+    try {
+      const response = await fetch("/api/audit-tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "add_task_discussion",
+          companyId: selectedCompanyId,
+          actorId,
+          actorName,
+          taskId,
+          message,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        if (data.lock !== undefined) {
+          setLock(data.lock);
+        }
+        throw new Error(data.error || "Could not add discussion comment.");
+      }
+      if (data.comment) {
+        setDiscussions((prev) => [...prev, data.comment]);
+      }
+      return true;
+    } catch (discussionError) {
+      setError(discussionError.message || "Could not add discussion comment.");
+      return false;
+    } finally {
+      setDiscussionBusyByTask((prev) => ({ ...prev, [taskId]: false }));
+    }
+  }
+
+  async function markNotificationReadById(notificationId) {
+    if (!selectedCompanyId || !actorId || !actorName.trim()) {
+      return;
+    }
+    setNotificationBusyById((prev) => ({ ...prev, [notificationId]: true }));
+    try {
+      const response = await fetch("/api/audit-tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "mark_notification_read",
+          companyId: selectedCompanyId,
+          actorId,
+          actorName,
+          notificationId,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Could not mark notification as read.");
+      }
+      setNotifications((prev) =>
+        prev.filter((notification) => notification.id !== String(notificationId))
+      );
+    } catch (notificationError) {
+      setError(notificationError.message || "Could not mark notification as read.");
+    } finally {
+      setNotificationBusyById((prev) => ({ ...prev, [notificationId]: false }));
+    }
+  }
+
   return (
     <>
       <Head>
@@ -595,6 +681,12 @@ export default function AuditTasks() {
         />
 
         <PresencePanel styles={styles} presence={presence} actorId={actorId} />
+        <NotificationsPanel
+          styles={styles}
+          notifications={notifications}
+          onMarkRead={markNotificationReadById}
+          markBusyById={notificationBusyById}
+        />
 
         <div style={styles.tabsRow}>
           <button
@@ -645,6 +737,9 @@ export default function AuditTasks() {
             onCommentBlur={handleCommentBlur}
             onCommentInput={autoResizeComment}
             savingById={savingById}
+            discussions={discussions}
+            onAddTaskDiscussion={addTaskDiscussion}
+            discussionBusyByTask={discussionBusyByTask}
           />
         ) : activeTab === "risk_responsibility" ? (
           <RiskResponsibilityTab

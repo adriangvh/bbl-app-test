@@ -75,6 +75,36 @@ create table if not exists public.audit_presence (
 create index if not exists audit_presence_company_seen_idx
 on public.audit_presence(company_id, last_seen_at desc);
 
+create table if not exists public.audit_task_discussions (
+  id bigint generated always as identity primary key,
+  company_id text not null references public.audit_companies(id) on delete cascade,
+  task_id text not null references public.audit_tasks(id) on delete cascade,
+  author_actor_id text not null,
+  author_name text not null,
+  message text not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists audit_task_discussions_company_task_created_idx
+on public.audit_task_discussions(company_id, task_id, created_at asc);
+
+create table if not exists public.audit_notifications (
+  id bigint generated always as identity primary key,
+  company_id text not null references public.audit_companies(id) on delete cascade,
+  task_id text references public.audit_tasks(id) on delete cascade,
+  recipient_name text not null,
+  recipient_name_key text not null,
+  sender_name text not null,
+  notification_type text not null,
+  message text not null,
+  is_read boolean not null default false,
+  created_at timestamptz not null default now(),
+  read_at timestamptz
+);
+
+create index if not exists audit_notifications_company_recipient_idx
+on public.audit_notifications(company_id, recipient_name_key, is_read, created_at desc);
+
 create or replace function public.set_updated_at_audit_locks()
 returns trigger
 language plpgsql
