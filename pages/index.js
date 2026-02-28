@@ -184,46 +184,59 @@ export default function Home() {
           Claim a company lock here, then open its audit task board.
         </p>
 
-        <div style={styles.headerRow}>
+        <div style={styles.sessionRow}>
+          <span style={styles.sessionLabel}>Auditor name</span>
           <input
             style={styles.nameInput}
             placeholder="Your name"
             value={actorName}
             onChange={(e) => setActorName(e.target.value)}
           />
-          <select
-            style={styles.filterSelect}
-            value={groupFilter}
-            onChange={(e) => setGroupFilter(e.target.value)}
-          >
-            <option value="all">All groups</option>
-            {groupOptions.map((group) => (
-              <option key={group} value={group}>
-                {group}
-              </option>
-            ))}
-          </select>
-          <select
-            style={styles.filterSelect}
-            value={stageFilter}
-            onChange={(e) => setStageFilter(e.target.value)}
-          >
-            <option value="all">All stages</option>
-            {stageOptions.map((stage) => (
-              <option key={stage} value={stage}>
-                {stage}
-              </option>
-            ))}
-          </select>
-          <select
-            style={styles.filterSelect}
-            value={lockFilter}
-            onChange={(e) => setLockFilter(e.target.value)}
-          >
-            <option value="all">All lock states</option>
-            <option value="locked">Locked</option>
-            <option value="unlocked">Unlocked</option>
-          </select>
+        </div>
+
+        <div style={styles.headerRow}>
+          <div style={styles.filterField}>
+            <span style={styles.filterLabel}>Group</span>
+            <select
+              style={styles.filterSelect}
+              value={groupFilter}
+              onChange={(e) => setGroupFilter(e.target.value)}
+            >
+              <option value="all">All groups</option>
+              {groupOptions.map((group) => (
+                <option key={group} value={group}>
+                  {group}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div style={styles.filterField}>
+            <span style={styles.filterLabel}>Stage</span>
+            <select
+              style={styles.filterSelect}
+              value={stageFilter}
+              onChange={(e) => setStageFilter(e.target.value)}
+            >
+              <option value="all">All stages</option>
+              {stageOptions.map((stage) => (
+                <option key={stage} value={stage}>
+                  {stage}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div style={styles.filterField}>
+            <span style={styles.filterLabel}>Lock</span>
+            <select
+              style={styles.filterSelect}
+              value={lockFilter}
+              onChange={(e) => setLockFilter(e.target.value)}
+            >
+              <option value="all">All lock states</option>
+              <option value="locked">Locked</option>
+              <option value="unlocked">Unlocked</option>
+            </select>
+          </div>
         </div>
 
         {error && <div style={styles.error}>{error}</div>}
@@ -321,28 +334,64 @@ export default function Home() {
 }
 
 const styles = {
-  headerRow: {
-    marginTop: ".8rem",
-    marginBottom: "1rem",
+  sessionRow: {
+    marginTop: ".9rem",
+    marginBottom: ".75rem",
     display: "flex",
+    alignItems: "center",
     gap: ".65rem",
     flexWrap: "wrap",
-    alignItems: "center",
+  },
+  sessionLabel: {
+    fontSize: 12,
+    fontWeight: 700,
+    letterSpacing: ".02em",
+    textTransform: "uppercase",
+    color: "#6b7280",
+  },
+  headerRow: {
+    marginTop: ".2rem",
+    marginBottom: "1rem",
+    display: "flex",
+    gap: ".85rem",
+    flexWrap: "wrap",
+    alignItems: "flex-end",
+    padding: ".7rem .8rem",
+    border: "1px solid #e5e7eb",
+    borderRadius: 12,
+    background: "#fafafa",
+  },
+  filterField: {
+    display: "flex",
+    flexDirection: "column",
+    gap: ".32rem",
+  },
+  filterLabel: {
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: ".03em",
+    textTransform: "uppercase",
+    color: "#6b7280",
   },
   nameInput: {
-    padding: ".55rem .7rem",
+    padding: ".56rem .75rem",
     borderRadius: 10,
-    border: "1px solid #d1d5db",
-    minWidth: 200,
+    border: "1px solid #cbd5e1",
+    minWidth: 220,
     outline: "none",
+    background: "#fff",
+    color: "#0f172a",
   },
   filterSelect: {
-    padding: ".55rem .7rem",
+    padding: ".56rem .75rem",
     borderRadius: 10,
-    border: "1px solid #d1d5db",
+    border: "1px solid #cbd5e1",
     minWidth: 170,
     outline: "none",
     background: "#fff",
+    color: "#111827",
+    fontWeight: 600,
+    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
   },
   tableWrap: {
     border: "1px solid #e5e7eb",
