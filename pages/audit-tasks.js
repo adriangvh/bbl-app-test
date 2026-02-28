@@ -107,6 +107,20 @@ export default function AuditTasks() {
   const routeCompanyName =
     typeof router.query.companyName === "string" ? router.query.companyName : "";
   const normalizedQuery = taskQuery.trim().toLowerCase();
+  const currentStage = selectedCompany?.auditStage;
+  const isAuditor = actorRole === "auditor";
+  const isPartner = actorRole === "partner";
+  const canAdvanceByStage = Boolean(
+    currentStage &&
+      currentStage !== "Partner review" &&
+      currentStage !== "Signing"
+  );
+  const auditorCanAdvance =
+    !isAuditor || currentStage === "First time auditing";
+  const canUseNextStage = holdsLock && canAdvanceByStage && auditorCanAdvance;
+  const canSendToSigning =
+    holdsLock && isPartner && currentStage === "Partner review";
+
   const filteredRows = rows.filter((row) => {
     const rowStatus = String(row.status || "").toLowerCase();
     const matchesStatus =
@@ -365,6 +379,7 @@ export default function AuditTasks() {
           action: "advance_stage",
           companyId: selectedCompanyId,
           actorId,
+          actorRole,
         }),
       });
       const data = await response.json();
@@ -470,7 +485,7 @@ export default function AuditTasks() {
                   ...(stageBusy ? styles.nextStageButtonBusy : {}),
                   ...(stageJustAdvanced ? styles.nextStageButtonDone : {}),
                 }}
-                disabled={!holdsLock || stageBusy}
+                disabled={!canUseNextStage || stageBusy}
                 onClick={advanceStage}
                 onMouseDown={() => setStagePressed(true)}
                 onMouseUp={() => setStagePressed(false)}
@@ -478,20 +493,22 @@ export default function AuditTasks() {
               >
                 {stageBusy ? "Sending to next stage..." : "Send to next stage"}
               </button>
-              {actorRole === "partner" && (
+              {isPartner && (
                 <button
                   style={{
                     ...styles.signingButton,
                     ...(signingPressed ? styles.signingButtonPressed : {}),
                     ...(signingBusy ? styles.signingButtonBusy : {}),
                   }}
-                  disabled={!holdsLock || signingBusy}
+                  disabled={!canSendToSigning || signingBusy}
                   onClick={sendToSigning}
                   onMouseDown={() => setSigningPressed(true)}
                   onMouseUp={() => setSigningPressed(false)}
                   onMouseLeave={() => setSigningPressed(false)}
                 >
-                  {signingBusy ? "Sending to signing..." : "Send to signing"}
+                  {signingBusy
+                    ? "Sending to signing..."
+                    : "Accept and send to signing"}
                 </button>
               )}
             </div>
