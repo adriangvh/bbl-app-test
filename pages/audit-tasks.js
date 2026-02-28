@@ -547,6 +547,16 @@ export default function AuditTasks() {
           >
             Risk & responsibility
           </button>
+          <button
+            type="button"
+            style={{
+              ...styles.tabButton,
+              ...(activeTab === "activity" ? styles.tabButtonActive : {}),
+            }}
+            onClick={() => setActiveTab("activity")}
+          >
+            Activity
+          </button>
         </div>
 
         {activeTab === "audit_tasks" ? (
@@ -566,7 +576,7 @@ export default function AuditTasks() {
             onCommentInput={autoResizeComment}
             savingById={savingById}
           />
-        ) : (
+        ) : activeTab === "risk_responsibility" ? (
           <RiskResponsibilityTab
             styles={styles}
             selectedCompany={selectedCompany}
@@ -574,11 +584,9 @@ export default function AuditTasks() {
             onResponseChange={updateRiskResponse}
             canEdit={holdsLock}
           />
-        )}
-
-        <div style={{ marginTop: "1rem" }}>
+        ) : (
           <ActivityTimeline styles={styles} activity={activity} />
-        </div>
+        )}
       </main>
     </>
   );
