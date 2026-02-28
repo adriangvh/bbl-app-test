@@ -8,6 +8,7 @@ import CompanyLockBar from "../components/audit/CompanyLockBar";
 import CompanyInfoCard from "../components/audit/CompanyInfoCard";
 import PresencePanel from "../components/audit/PresencePanel";
 import RiskResponsibilityTab from "../components/audit/RiskResponsibilityTab";
+import SigningDocumentTab from "../components/audit/SigningDocumentTab";
 import { styles } from "../components/audit/auditTasksStyles";
 
 const TASKS_POLL_MS = 5000;
@@ -15,6 +16,32 @@ const PRESENCE_PING_MS = 10000;
 
 function getTodayIso() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function buildDefaultSigningDocument(company) {
+  const companyName = company?.name || "Unknown Company";
+  const orgNo = company?.organizationNumber || "Unknown";
+  return [
+    "1. Engagement Summary",
+    `This signing memorandum covers the annual audit for ${companyName} (${orgNo}).`,
+    "",
+    "2. Scope Performed",
+    "- Financial statement procedures completed.",
+    "- Risk and control testing reviewed.",
+    "- Outstanding exceptions discussed with management.",
+    "",
+    "3. Key Findings",
+    "- No material misstatements identified.",
+    "- Significant estimates reviewed and documented.",
+    "- Final management representation received.",
+    "",
+    "4. Partner Conclusion",
+    "Based on the completed procedures and review evidence, the engagement is considered ready for final signing.",
+    "",
+    "5. Notes Before Signing",
+    "- Add any final partner comments here.",
+    "- Add any conditions for follow-up in next cycle.",
+  ].join("\n");
 }
 
 export default function AuditTasks() {
@@ -43,6 +70,9 @@ export default function AuditTasks() {
   const [taskQuery, setTaskQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [activeTab, setActiveTab] = useState("audit_tasks");
+  const [signingDocumentDraft, setSigningDocumentDraft] = useState("");
+  const [signingDocumentDirty, setSigningDocumentDirty] = useState(false);
+  const [signingDocumentBusy, setSigningDocumentBusy] = useState(false);
 
   const holdsLock = Boolean(lock && actorId && lock.actorId === actorId);
   const canEdit = holdsLock;
@@ -144,6 +174,27 @@ export default function AuditTasks() {
 
     return Array.from(map.values()).sort((a, b) => a.handle.localeCompare(b.handle));
   }, [mentionUsers, actorName, presence, activity, discussions]);
+
+  useEffect(() => {
+    if (!isPartner && activeTab === "signing_document") {
+      setActiveTab("audit_tasks");
+    }
+  }, [isPartner, activeTab]);
+
+  useEffect(() => {
+    if (!selectedCompany) {
+      if (!signingDocumentDirty) {
+        setSigningDocumentDraft("");
+      }
+      return;
+    }
+    if (signingDocumentDirty) {
+      return;
+    }
+    setSigningDocumentDraft(
+      selectedCompany.signingDocument || buildDefaultSigningDocument(selectedCompany)
+    );
+  }, [selectedCompanyId, selectedCompany?.signingDocument, signingDocumentDirty]);
 
   function updateRowLocal(id, key, value) {
     setRows((prevRows) =>
@@ -621,6 +672,61 @@ export default function AuditTasks() {
     }
   }
 
+  function handleSigningDocumentChange(nextValue) {
+    setSigningDocumentDraft(nextValue);
+    setSigningDocumentDirty(true);
+  }
+
+  function resetSigningDocumentDraft() {
+    setSigningDocumentDraft(
+      selectedCompany?.signingDocument || buildDefaultSigningDocument(selectedCompany)
+    );
+    setSigningDocumentDirty(false);
+  }
+
+  async function saveSigningDocument() {
+    if (!selectedCompanyId || !actorId || !isPartner) {
+      return;
+    }
+    setSigningDocumentBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/audit-tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update_signing_document",
+          companyId: selectedCompanyId,
+          actorId,
+          actorRole,
+          content: signingDocumentDraft,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        if (data.lock !== undefined) {
+          setLock(data.lock);
+        }
+        throw new Error(data.error || "Could not save signing document.");
+      }
+      if (data.company) {
+        setCompanies((prev) =>
+          prev.map((company) =>
+            company.id === data.company.id ? { ...company, ...data.company } : company
+          )
+        );
+      }
+      if (data.lock !== undefined) {
+        setLock(data.lock);
+      }
+      setSigningDocumentDirty(false);
+    } catch (saveError) {
+      setError(saveError.message || "Could not save signing document.");
+    } finally {
+      setSigningDocumentBusy(false);
+    }
+  }
+
   return (
     <>
       <Head>
@@ -711,6 +817,18 @@ export default function AuditTasks() {
           >
             Activity
           </button>
+          {isPartner && (
+            <button
+              type="button"
+              style={{
+                ...styles.tabButton,
+                ...(activeTab === "signing_document" ? styles.tabButtonActive : {}),
+              }}
+              onClick={() => setActiveTab("signing_document")}
+            >
+              Signing document
+            </button>
+          )}
         </div>
 
         {activeTab === "audit_tasks" ? (
@@ -741,6 +859,18 @@ export default function AuditTasks() {
             responses={riskResponses}
             onResponseChange={updateRiskResponse}
             canEdit={holdsLock}
+          />
+        ) : activeTab === "signing_document" ? (
+          <SigningDocumentTab
+            styles={styles}
+            selectedCompany={selectedCompany}
+            value={signingDocumentDraft}
+            busy={signingDocumentBusy}
+            dirty={signingDocumentDirty}
+            canEdit={holdsLock && isPartner}
+            onChange={handleSigningDocumentChange}
+            onSave={saveSigningDocument}
+            onReset={resetSigningDocumentDraft}
           />
         ) : (
           <ActivityTimeline styles={styles} activity={activity} />

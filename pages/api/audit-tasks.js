@@ -10,6 +10,7 @@ import {
   removePresence,
   sendCompanyToSigning,
   upsertPresence,
+  updateCompanySigningDocument,
   updateCompanyRiskChecklist,
   updateTask,
 } from "../../lib/auditTasksStore";
@@ -127,6 +128,18 @@ export default async function handler(req, res) {
         return;
       }
       result = await updateCompanyRiskChecklist(companyId, actorId, field, value);
+    } else if (action === "update_signing_document") {
+      const { content } = req.body || {};
+      if (typeof content !== "string") {
+        res.status(400).json({ error: "Missing or invalid content." });
+        return;
+      }
+      result = await updateCompanySigningDocument(
+        companyId,
+        actorId,
+        typeof actorRole === "string" ? actorRole : "auditor",
+        content
+      );
     } else if (action === "presence_ping") {
       const { activeTab } = req.body || {};
       result = await upsertPresence(

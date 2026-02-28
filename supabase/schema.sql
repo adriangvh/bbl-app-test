@@ -8,6 +8,7 @@ create table if not exists public.audit_companies (
   organization_type text not null,
   responsible_partner text not null,
   audit_stage text not null default 'First time auditing',
+  signing_document text,
   created_at timestamptz not null default now()
 );
 
@@ -19,7 +20,8 @@ add column if not exists overall_risk_assessed boolean,
 add column if not exists fraud_risk_documented boolean,
 add column if not exists controls_tested boolean,
 add column if not exists partner_review_ready boolean,
-add column if not exists task_due_date date;
+add column if not exists task_due_date date,
+add column if not exists signing_document text;
 
 create table if not exists public.audit_tasks (
   id text primary key,
