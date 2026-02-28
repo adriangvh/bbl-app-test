@@ -75,9 +75,18 @@ function isDueSoon(company) {
   return diffDays >= 0 && diffDays <= 7;
 }
 
+function getSeenNotificationsStorageKey(viewerName) {
+  const key = String(viewerName || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ".");
+  return `auditSeenNotifications:${key || "anonymous"}`;
+}
+
 export default function Home() {
   const [companies, setCompanies] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [seenNotificationIds, setSeenNotificationIds] = useState([]);
   const [notificationBusyById, setNotificationBusyById] = useState({});
   const [groupFilter, setGroupFilter] = useState("all");
   const [stageFilter, setStageFilter] = useState("all");
@@ -93,6 +102,13 @@ export default function Home() {
   const [showAlerts, setShowAlerts] = useState(false);
 
   const canEditDueDate = employeeType === "manager" || employeeType === "partner";
+  const unseenNotificationsCount = useMemo(
+    () =>
+      notifications.filter(
+        (notification) => !seenNotificationIds.includes(String(notification.id))
+      ).length,
+    [notifications, seenNotificationIds]
+  );
 
   async function loadCompanies(options = {}) {
     const { silent = false } = options;
@@ -166,9 +182,21 @@ export default function Home() {
     }
     if (!actorName) {
       setNotifications([]);
+      setSeenNotificationIds([]);
       return;
     }
     window.localStorage.setItem("auditActorName", actorName);
+    try {
+      const raw = window.localStorage.getItem(
+        getSeenNotificationsStorageKey(actorName)
+      );
+      const parsed = raw ? JSON.parse(raw) : [];
+      setSeenNotificationIds(
+        Array.isArray(parsed) ? parsed.map((id) => String(id)) : []
+      );
+    } catch {
+      setSeenNotificationIds([]);
+    }
     loadNotifications();
   }, [actorName]);
 
@@ -214,11 +242,38 @@ export default function Home() {
       setNotifications((prev) =>
         prev.filter((notification) => notification.id !== String(notificationId))
       );
+      setSeenNotificationIds((prev) => {
+        const next = prev.filter((id) => id !== String(notificationId));
+        if (typeof window !== "undefined" && actorName.trim()) {
+          window.localStorage.setItem(
+            getSeenNotificationsStorageKey(actorName),
+            JSON.stringify(next)
+          );
+        }
+        return next;
+      });
     } catch (notificationError) {
       setError(notificationError.message || "Could not mark notification as read.");
     } finally {
       setNotificationBusyById((prev) => ({ ...prev, [notificationId]: false }));
     }
+  }
+
+  function markNotificationSeen(notificationId) {
+    const nextId = String(notificationId);
+    setSeenNotificationIds((prev) => {
+      if (prev.includes(nextId)) {
+        return prev;
+      }
+      const next = [...prev, nextId];
+      if (typeof window !== "undefined" && actorName.trim()) {
+        window.localStorage.setItem(
+          getSeenNotificationsStorageKey(actorName),
+          JSON.stringify(next)
+        );
+      }
+      return next;
+    });
   }
 
   async function updateLock(companyId, action) {
@@ -345,8 +400,8 @@ export default function Home() {
               aria-label="Toggle alerts"
             >
               <span style={styles.bellIcon}>🔔</span>
-              {notifications.length > 0 && (
-                <span style={styles.bellBadge}>+{notifications.length}</span>
+              {unseenNotificationsCount > 0 && (
+                <span style={styles.bellBadge}>+{unseenNotificationsCount}</span>
               )}
             </button>
             <Link href="/dashboard" style={styles.dashboardLink}>
@@ -392,7 +447,11 @@ export default function Home() {
             ) : (
               <div style={styles.notificationsList}>
                 {notifications.map((notification) => (
-                  <div key={notification.id} style={styles.notificationItem}>
+                  <div
+                    key={notification.id}
+                    style={styles.notificationItem}
+                    onClick={() => markNotificationSeen(notification.id)}
+                  >
                     <div style={styles.notificationMessage}>{notification.message}</div>
                     <div style={styles.notificationMeta}>
                       <span>{notification.companyName}</span>
@@ -409,6 +468,7 @@ export default function Home() {
                           },
                         }}
                         style={styles.notificationOpenLink}
+                        onClick={() => markNotificationSeen(notification.id)}
                       >
                         Open company
                       </Link>

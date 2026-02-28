@@ -2,6 +2,22 @@ import Head from "next/head";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+const AUDIT_STAGE_ORDER = [
+  "First time auditing",
+  "First time review",
+  "Second time review",
+  "Partner review",
+  "Signing",
+];
+
+const STAGE_COLORS = {
+  "First time auditing": "#2563eb",
+  "First time review": "#d97706",
+  "Second time review": "#0f766e",
+  "Partner review": "#7c3aed",
+  Signing: "#059669",
+};
+
 function formatDayLabel(isoDate) {
   const date = new Date(`${isoDate}T00:00:00`);
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -77,6 +93,76 @@ function TrendChart({ title, seriesA, seriesB, colorA, colorB, labelA, labelB })
   );
 }
 
+function MultiStageTrendChart({ title, stageSeries }) {
+  const width = 1200;
+  const height = 260;
+  const paddingX = 26;
+  const paddingY = 20;
+  const chartWidth = width - paddingX * 2;
+  const chartHeight = height - paddingY * 2;
+  const maxValue = Math.max(
+    1,
+    ...stageSeries.flatMap((series) => series.points.map((point) => point.value))
+  );
+
+  function getPoints(series) {
+    if (series.points.length === 1) {
+      return `${paddingX},${height / 2}`;
+    }
+    return series.points
+      .map((point, index) => {
+        const x = paddingX + (index / (series.points.length - 1)) * chartWidth;
+        const y = paddingY + chartHeight - (point.value / maxValue) * chartHeight;
+        return `${x},${y}`;
+      })
+      .join(" ");
+  }
+
+  const xLabels =
+    stageSeries[0]?.points.filter(
+      (_, index, points) => index % 5 === 0 || index === points.length - 1
+    ) || [];
+
+  return (
+    <section style={styles.chartCardWide}>
+      <div style={styles.chartHead}>
+        <h2 style={styles.chartTitle}>{title}</h2>
+        <div style={styles.legendRow}>
+          {stageSeries.map((series) => (
+            <span key={series.name} style={{ ...styles.legendItem, color: series.color }}>
+              <span style={{ ...styles.legendDot, background: series.color }} />
+              {series.name}
+            </span>
+          ))}
+        </div>
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} style={styles.chartSvg} role="img" aria-label={title}>
+        {[0, 1, 2, 3, 4].map((step) => {
+          const y = paddingY + (step / 4) * chartHeight;
+          return <line key={step} x1={paddingX} y1={y} x2={width - paddingX} y2={y} style={styles.gridLine} />;
+        })}
+        {stageSeries.map((series) => (
+          <polyline
+            key={series.name}
+            fill="none"
+            stroke={series.color}
+            strokeWidth="2.5"
+            points={getPoints(series)}
+            strokeLinecap="round"
+          />
+        ))}
+      </svg>
+      <div style={styles.xAxisLabels}>
+        {xLabels.map((point) => (
+          <span key={point.date} style={styles.xAxisLabel}>
+            {formatDayLabel(point.date)}
+          </span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function StageBars({ stageDistribution = {} }) {
   const entries = Object.entries(stageDistribution || {});
   const maxCount = Math.max(1, ...entries.map(([, count]) => count));
@@ -114,6 +200,7 @@ export default function DashboardPage() {
     signingReadyCount: 0,
     stageDistribution: {},
     processingTimeline: [],
+    stageTimeline: [],
   });
 
   useEffect(() => {
@@ -151,6 +238,17 @@ export default function DashboardPage() {
   );
   const timelineTotal = timeline.reduce((sum, item) => sum + (item.processedTotal || 0), 0);
   const signingTotal = timeline.reduce((sum, item) => sum + (item.sentToSigning || 0), 0);
+  const stageSeries = useMemo(() => {
+    const timelineByStage = stats.stageTimeline || [];
+    return AUDIT_STAGE_ORDER.map((stage) => ({
+      name: stage,
+      color: STAGE_COLORS[stage] || "#64748b",
+      points: timelineByStage.map((row) => ({
+        date: row.date,
+        value: row?.stages?.[stage] || 0,
+      })),
+    }));
+  }, [stats.stageTimeline]);
 
   return (
     <>
@@ -209,6 +307,11 @@ export default function DashboardPage() {
                 labelB="Signing moves"
               />
             </div>
+
+            <MultiStageTrendChart
+              title="Stage Progress by Date (One Line per Stage)"
+              stageSeries={stageSeries}
+            />
 
             <StageBars stageDistribution={stats.stageDistribution} />
           </>
@@ -282,6 +385,14 @@ const styles = {
     background: "#fff",
     padding: ".8rem .9rem",
     boxShadow: "0 8px 28px rgba(15, 23, 42, 0.05)",
+  },
+  chartCardWide: {
+    border: "1px solid #e5e7eb",
+    borderRadius: 14,
+    background: "#fff",
+    padding: ".8rem .9rem",
+    boxShadow: "0 8px 28px rgba(15, 23, 42, 0.05)",
+    marginBottom: "1rem",
   },
   chartHead: {
     display: "flex",
