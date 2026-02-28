@@ -51,6 +51,7 @@ export default function Home() {
   const [companies, setCompanies] = useState([]);
   const [groupFilter, setGroupFilter] = useState("all");
   const [stageFilter, setStageFilter] = useState("all");
+  const [lockFilter, setLockFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [actorId, setActorId] = useState("");
@@ -152,9 +153,22 @@ export default function Home() {
   const stageOptions = AUDIT_STAGES.filter((stage) =>
     companies.some((company) => company.auditStage === stage)
   );
+  const matchesLockFilter = (company) => {
+    if (lockFilter === "all") {
+      return true;
+    }
+    if (lockFilter === "locked") {
+      return Boolean(company.lock);
+    }
+    if (lockFilter === "unlocked") {
+      return !company.lock;
+    }
+    return true;
+  };
   const filteredCompanies = companies.filter((company) =>
     (groupFilter === "all" ? true : company.group === groupFilter) &&
-    (stageFilter === "all" ? true : company.auditStage === stageFilter)
+    (stageFilter === "all" ? true : company.auditStage === stageFilter) &&
+    matchesLockFilter(company)
   );
 
   return (
@@ -200,6 +214,15 @@ export default function Home() {
                 {stage}
               </option>
             ))}
+          </select>
+          <select
+            style={styles.filterSelect}
+            value={lockFilter}
+            onChange={(e) => setLockFilter(e.target.value)}
+          >
+            <option value="all">All lock states</option>
+            <option value="locked">Locked</option>
+            <option value="unlocked">Unlocked</option>
           </select>
         </div>
 

@@ -420,11 +420,7 @@ export default function AuditTasks() {
               onMouseUp={() => setStagePressed(false)}
               onMouseLeave={() => setStagePressed(false)}
             >
-              {stageBusy
-                ? "Sending to next stage..."
-                : stageJustAdvanced
-                ? "Moved to next stage"
-                : "Send to next stage"}
+              {stageBusy ? "Sending to next stage..." : "Send to next stage"}
             </button>
           </div>
           <div style={styles.companyInfoGrid}>
